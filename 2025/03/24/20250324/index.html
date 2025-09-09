@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   
   
-  <title>Android源码阅读之———广播的注册与分发 | 出发的越久,也要记得当初的目的</title>
+  <title>Android源码阅读之———广播的注册与分发 | 在这个娱乐至死的时代，把握好你仅有的时间和才能！</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta name="description" content="这一节去分析一下广播的注册，广播消息的分发过程。 一些概念： 无序广播：默认发送的就是无序广播，所有注册了的广播几乎在同一时刻接收到广播消息； 有序广播：优先级越高越先收到，传递过程中，可以控制结束该广播，也可以修改传递数据； 粘性消息：发送的粘性消息一直存放在AMS中，当注册广播时，如果之前已经有粘性消息存在，则直接派发。  12345678910111213141516171819202122">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Android源码阅读之———广播的注册与分发">
 <meta property="og:url" content="http://example.com/2025/03/24/20250324/index.html">
-<meta property="og:site_name" content="出发的越久,也要记得当初的目的">
+<meta property="og:site_name" content="在这个娱乐至死的时代，把握好你仅有的时间和才能！">
 <meta property="og:description" content="这一节去分析一下广播的注册，广播消息的分发过程。 一些概念： 无序广播：默认发送的就是无序广播，所有注册了的广播几乎在同一时刻接收到广播消息； 有序广播：优先级越高越先收到，传递过程中，可以控制结束该广播，也可以修改传递数据； 粘性消息：发送的粘性消息一直存放在AMS中，当注册广播时，如果之前已经有粘性消息存在，则直接派发。  12345678910111213141516171819202122">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-03-24T07:37:00.000Z">
@@ -18,7 +18,7 @@
 <meta property="article:author" content="Cherry">
 <meta name="twitter:card" content="summary">
   
-    <link rel="alternate" href="/atom.xml" title="出发的越久,也要记得当初的目的" type="application/atom+xml">
+    <link rel="alternate" href="/atom.xml" title="在这个娱乐至死的时代，把握好你仅有的时间和才能！" type="application/atom+xml">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -45,11 +45,11 @@
   <div id="header-outer" class="outer">
     <div id="header-title" class="inner">
       <h1 id="logo-wrap">
-        <a href="/" id="logo">出发的越久,也要记得当初的目的</a>
+        <a href="/" id="logo">在这个娱乐至死的时代，把握好你仅有的时间和才能！</a>
       </h1>
       
         <h2 id="subtitle-wrap">
-          <a href="/" id="subtitle">加油,努力</a>
+          <a href="/" id="subtitle">人活在世上，不但有身体，还有头脑和心胸。——王小波</a>
         </h2>
       
     </div>
