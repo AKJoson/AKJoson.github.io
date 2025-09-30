@@ -77,6 +77,48 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-Flutter-apk-build-success-build-tool-couldn-t-find-it" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/" class="article-date">
+  <time class="dt-published" datetime="2025-09-30T07:47:56.000Z" itemprop="datePublished">2025-09-30</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/">Flutter apk build success, build tool couldn&#39;t find it</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h4 id="When-compiling-an-Android-APK-in-a-Flutter-project-it-prompts-that-the-compiled-APK-cannot-be-found"><a href="#When-compiling-an-Android-APK-in-a-Flutter-project-it-prompts-that-the-compiled-APK-cannot-be-found" class="headerlink" title="When compiling an Android APK in a Flutter project, it prompts that the compiled APK cannot be found."></a>When compiling an Android APK in a Flutter project, it prompts that the compiled APK cannot be found.</h4><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Error: Gradle build failed to produce an .apk file. It<span class="string">&#x27;s likely that this file was generated under /Users/pengyin/Downloads/program/company/hilife/hilife3inone-flutter/build, but the tool couldn&#x27;</span>t find it.</span><br></pre></td></tr></table></figure>
+<h4 id="In-android-build-gradle-you-can-see-the-‘product-staging’-flavor"><a href="#In-android-build-gradle-you-can-see-the-‘product-staging’-flavor" class="headerlink" title="In android&#x2F;build.gradle, you can see the ‘product&amp;staging’ flavor"></a>In android&#x2F;build.gradle, you can see the ‘product&amp;staging’ flavor</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">productFlavors &#123;</span><br><span class="line">    product &#123;</span><br><span class="line">        dimension &quot;app&quot;</span><br><span class="line">        buildConfigField(&quot;boolean&quot;, &quot;LOG_WRITE_DISABLE&quot;, &quot;true&quot;)</span><br><span class="line">        ndk &#123;</span><br><span class="line">            abiFilters &#x27;armeabi-v7a&#x27;, &#x27;arm64-v8a&#x27;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    staging &#123;</span><br><span class="line">        dimension &quot;app&quot;</span><br><span class="line">        buildConfigField(&quot;boolean&quot;, &quot;LOG_WRITE_DISABLE&quot;, &quot;false&quot;)</span><br><span class="line">        ndk &#123;</span><br><span class="line">            abiFilters &#x27;armeabi-v7a&#x27;, &#x27;arm64-v8a&#x27;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="Solution"><a href="#Solution" class="headerlink" title="Solution:"></a>Solution:</h4><p><img src="/images/flutter_build_apk_error.png" alt="Image text"></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/" data-id="cmg69bu0b000000u12k2s4vgd" data-title="Flutter apk build success, build tool couldn&#39;t find it" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-C-C-基础之三-指针引起的内存泄露" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/" class="article-date">
@@ -354,6 +396,10 @@
     <h3 class="widget-title">Recent Posts</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/">Flutter apk build success, build tool couldn&#39;t find it</a>
+          </li>
         
           <li>
             <a href="/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/">C/C++基础之三(指针引起的内存泄露)</a>
