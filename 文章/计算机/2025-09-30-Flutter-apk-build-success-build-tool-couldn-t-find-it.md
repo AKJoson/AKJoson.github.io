@@ -1,7 +1,6 @@
 ---
 title: "Flutter apk build success, build tool couldn't find it"
 date: "2025-09-30"
-category: "技术"
 tags: ["Flutter", "Android"]
 summary: "解决 Flutter 已生成 APK 却无法找到产物的问题，记录 Gradle flavor 配置与构建方式。"
 permalink: "/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/"

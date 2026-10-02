@@ -3,32 +3,51 @@ import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { readPosts, categories, slug, escape as e } from './content.mjs';
+import { readPosts, discoverCategories, categoryUrl, validCategoryPath, slug, escape as e } from './content.mjs';
 import { createRenderer } from './render.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const preserved = ['privacy-policy.html', 'privacy-police-droidbrid.html', 'privacy-police-droidbridge', 'support.html', 'supportdb.html', 'app-ads.txt'];
-const managed = name => ['index.html', '404.html', 'about/index.html', 'atom.xml', 'sitemap.xml', 'robots.txt'].includes(name) || /^(?:\d{4}\/\d{2}\/\d{2}\/[^/]+|archives(?:\/\d{4}(?:\/\d{2})?)?|categories\/[a-z0-9-]+)\/index\.html$/.test(name);
+const managed = name => typeof name === 'string' && !name.includes('\\') && name.split('/').every(part => part && part !== '.' && part !== '..') && (
+  ['index.html', '404.html', 'about/index.html', 'atom.xml', 'sitemap.xml', 'robots.txt'].includes(name) ||
+  /^(?:\d{4}\/\d{2}\/\d{2}\/[^/]+|archives(?:\/\d{4}(?:\/\d{2})?)?)\/index\.html$/.test(name) ||
+  (name.startsWith('categories/') && name.endsWith('/index.html') && validCategoryPath(name.slice(11, -11)))
+);
+// These are compatibility URLs from the previous theme, not category definitions.
+const legacyCategoryUrls = {
+  tech: '计算机', computer: '计算机', 'computer/architecture': '计算机/组成原理',
+  'computer/kotlin': '计算机/Kotlin', 'computer/cpp': '计算机/C++',
+  life: '日常随想', reading: '读书感悟'
+};
 
 export function build({ root = ROOT, out = root, drafts = false } = {}) {
   if (drafts && path.resolve(root) === path.resolve(out)) throw new Error('草稿只能构建到独立的预览目录，不能写入发布目录。');
   const config = JSON.parse(fs.readFileSync(path.join(root, 'site.config.json'), 'utf8'));
   const posts = readPosts(root, { drafts });
-  const render = createRenderer(root, config, posts);
+  const categoryRegistry = discoverCategories(root, { drafts });
+  const render = createRenderer(root, config, posts, categoryRegistry);
   const files = new Map();
   files.set('index.html', render.listing());
-  for (const [name, key] of Object.entries(categories)) files.set(`categories/${key}/index.html`, render.listing(name));
+  for (const name of Object.keys(categoryRegistry)) files.set(`categories/${name}/index.html`, render.listing(name));
+  for (const [alias, category] of Object.entries(legacyCategoryUrls)) {
+    if (Object.hasOwn(categoryRegistry, category) && !files.has(`categories/${alias}/index.html`)) files.set(`categories/${alias}/index.html`, render.listing(category));
+  }
   posts.forEach((post, index) => files.set(post.url.slice(1) + 'index.html', render.article(post, index)));
   for (const prefix of ['', ...new Set(posts.flatMap(p => [p.date.slice(0, 4), p.date.slice(0, 7)]))]) files.set(`archives/${prefix ? prefix.replaceAll('-', '/') + '/' : ''}index.html`, render.archive(prefix));
   files.set('about/index.html', render.about());
   files.set('404.html', render.notFound());
   const absolute = url => new URL(url, config.url).href;
   const updated = posts.length ? `${posts[0].date}T00:00:00+08:00` : '2026-01-01T00:00:00+08:00';
-  files.set('atom.xml', `<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom"><title>${e(config.title)}</title><subtitle>${e(config.description)}</subtitle><id>${e(absolute('/'))}</id><link href="${e(absolute('/atom.xml'))}" rel="self"/><link href="${e(absolute('/'))}"/><updated>${updated}</updated><author><name>${e(config.author)}</name></author>${posts.filter(p => !p.draft).map(p => `<entry><title>${e(p.title)}</title><id>${e(absolute(p.url))}</id><link href="${e(absolute(p.url))}"/><published>${p.date}T00:00:00+08:00</published><updated>${p.date}T00:00:00+08:00</updated><category term="${p.category}"/><summary>${e(p.summary)}</summary></entry>`).join('')}</feed>\n`);
-  const pages = ['/', '/about/', '/archives/', ...Object.values(categories).map(k => `/categories/${k}/`), ...posts.filter(p => !p.draft).map(p => p.url)];
+  files.set('atom.xml', `<?xml version="1.0" encoding="utf-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom"><title>${e(config.title)}</title><subtitle>${e(config.description)}</subtitle><id>${e(absolute('/'))}</id><link href="${e(absolute('/atom.xml'))}" rel="self"/><link href="${e(absolute('/'))}"/><updated>${updated}</updated><author><name>${e(config.author)}</name></author>${posts.filter(p => !p.draft).map(p => `<entry><title>${e(p.title)}</title><id>${e(absolute(p.url))}</id><link href="${e(absolute(p.url))}"/><published>${p.date}T00:00:00+08:00</published><updated>${p.date}T00:00:00+08:00</updated><category term="${e(p.category)}"/><summary>${e(p.summary)}</summary></entry>`).join('')}</feed>\n`);
+  const pages = ['/', '/about/', '/archives/', ...Object.keys(categoryRegistry).map(categoryUrl), ...posts.filter(p => !p.draft).map(p => p.url)];
   files.set('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${pages.map(url => `<url><loc>${e(absolute(url))}</loc></url>`).join('')}</urlset>\n`);
   files.set('robots.txt', `User-agent: *\nAllow: /\nDisallow: /tooling/\nDisallow: /theme/\nDisallow: /文章/\nSitemap: ${absolute('/sitemap.xml')}\n`);
-  for (const name of files.keys()) if (!managed(name) || name.includes('..')) throw new Error(`输出路径不合法：${name}`);
+  for (const name of files.keys()) if (!managed(name)) throw new Error(`输出路径不合法：${name}`);
+  // Git does not retain empty folders. Preserve empty categories automatically.
+  for (const category of Object.keys(categoryRegistry)) {
+    const folder = path.join(root, '文章', category);
+    if (fs.existsSync(folder) && !fs.readdirSync(folder).some(name => !name.startsWith('.')) && !fs.existsSync(path.join(folder, '.gitkeep'))) fs.writeFileSync(path.join(folder, '.gitkeep'), '', { flag: 'wx' });
+  }
   // Render and validate all posts before changing any published page.
   fs.mkdirSync(out, { recursive: true });
   const manifestPath = path.join(out, '.site-manifest.json');
@@ -48,7 +67,7 @@ export function build({ root = ROOT, out = root, drafts = false } = {}) {
     fs.writeFileSync(target, rendered);
   }
   for (const name of previous) {
-    if (managed(name) && !name.includes('..') && !files.has(name)) fs.rmSync(path.join(out, name), { force: true });
+    if (managed(name) && !files.has(name)) fs.rmSync(path.join(out, name), { force: true });
   }
   fs.writeFileSync(manifestPath, JSON.stringify([...files.keys()].sort(), null, 2) + '\n');
   if (path.resolve(out) !== path.resolve(root)) {
@@ -58,16 +77,17 @@ export function build({ root = ROOT, out = root, drafts = false } = {}) {
   return { posts, files: [...files.keys()], out };
 }
 
-function newPost(args) {
+export function newPost(args, root = ROOT) {
   const [category, ...words] = args;
   const title = words.join(' ').trim();
-  if (!Object.hasOwn(categories, category) || !title) throw new Error(`用法：npm run new -- 分类 "文章标题"（可用分类：${Object.keys(categories).join('、')}）`);
+  if (!validCategoryPath(category) || !title) throw new Error('用法：npm run new -- "计算机/Kotlin" "文章标题"，目录路径不能包含空层级、隐藏目录或 ..');
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  const file = path.join(ROOT, '草稿', category, `${date}-${slug(title).slice(0, 80)}.md`);
+  const file = path.join(root, '草稿', category, `${date}-${slug(title).slice(0, 80)}.md`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const values = { title, date, category, tags: [], summary: '用一两句话介绍这篇文章。' };
+  const values = { title, date, tags: [], summary: '用一两句话介绍这篇文章。' };
   fs.writeFileSync(file, `---\n${Object.entries(values).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n\n## 从这里开始\n\n写下你的正文。\n`, { flag: 'wx' });
-  console.log(`已创建草稿：${path.relative(ROOT, file)}\n写完后移到 文章/${category}/，运行 npm run publish 发布。\n预览草稿：npm run dev -- --drafts`);
+  console.log(`已创建草稿：${path.relative(root, file)}\n写完后移到 文章/${category}/，运行 npm run publish 发布。\n预览草稿：npm run dev -- --drafts`);
+  return file;
 }
 
 function serve(args) {
@@ -94,7 +114,7 @@ function serve(args) {
       if (!fs.existsSync(dir)) return;
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const file = path.join(dir, entry.name);
-        if (entry.isDirectory()) visit(file);
+        if (entry.isDirectory()) { state.push(`directory:${file}`); visit(file); }
         else if (entry.isFile()) { const stat = fs.statSync(file); state.push(`${file}:${stat.mtimeMs}:${stat.size}`); }
       }
     };
@@ -106,7 +126,7 @@ function serve(args) {
   const watcher = setInterval(() => {
     try {
       const current = snapshot();
-      if (current !== last) { last = current; const result = build({ out, drafts }); console.log(`已更新 ${result.posts.length} 篇文章，请刷新浏览器。`); }
+      if (current !== last) { last = current; const result = build({ out, drafts }); last = snapshot(); console.log(`已更新 ${result.posts.length} 篇文章，请刷新浏览器。`); }
     } catch (error) { console.error(error.message); }
   }, 1000);
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { clearInterval(watcher); server.close(); });

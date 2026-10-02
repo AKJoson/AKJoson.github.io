@@ -2,30 +2,52 @@ import fs from 'node:fs';
 import path from 'node:path';
 import MarkdownIt from './vendor/markdown-it.cjs';
 
-export const categoryDetails = {
-  '技术': {
-    slug: 'tech', label: 'TECHNOLOGY', icon: '⌘',
-    summary: '探索、实践与问题的解法',
-    description: '探索、实践，以及那些终于想明白的问题。'
-  },
-  '日常随想': {
-    slug: 'life', label: 'EVERYDAY LIFE', icon: '✳',
-    summary: '生活、观察与偶尔的灵感',
-    description: '把日常里的小事，写成值得回看的片段。'
-  },
-  '读书感悟': {
-    slug: 'reading', label: 'READING', icon: '▤',
-    summary: '阅读、摘记与自己的思考',
-    description: '在书页之间，遇见新的想法，也读懂一点自己。'
-  }
-};
-export const categories = Object.fromEntries(Object.entries(categoryDetails).map(([name, details]) => [name, details.slug]));
+// Category names and hierarchy come only from folders, never a manual registry.
+export function validCategoryPath(value) {
+  return typeof value === 'string' && value.split('/').every(part => part.trim() && !part.startsWith('.') && !/[\\\u0000-\u001f]/.test(part));
+}
+export const categoryUrl = category => `/categories/${category.split('/').map(encodeURIComponent).join('/')}/`;
+
+export function discoverCategories(root, { drafts = false } = {}) {
+  const registry = Object.create(null);
+  const register = category => {
+    if (Object.hasOwn(registry, category)) return;
+    if (!validCategoryPath(category)) throw new Error(`分类目录名称不合法：${category}`);
+    const parts = category.split('/');
+    const name = parts.at(-1);
+    registry[category] = {
+      name, path: category, parent: parts.slice(0, -1).join('/'),
+      label: parts.length > 1 ? 'TOPIC NOTES' : 'THE JOURNAL', icon: '▤',
+      summary: `关于${name}的记录`, description: `关于「${name}」的笔记与思考。`
+    };
+  };
+  const scan = (directory, parent = '') => {
+    if (!fs.existsSync(directory)) return;
+    const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      if (entry.isDirectory()) {
+        const category = parent ? `${parent}/${entry.name}` : entry.name;
+        register(category);
+        scan(path.join(directory, entry.name), category);
+      } else if (!parent && entry.isFile() && entry.name.endsWith('.md')) {
+        register('未分类');
+      }
+    }
+  };
+  scan(path.join(root, '文章'));
+  if (drafts) scan(path.join(root, '草稿'));
+  return registry;
+}
+
+export const inCategory = (post, category = '') => !category || post.category === category || post.category.startsWith(`${category}/`);
+export const categoryAncestors = category => category.split('/').map((_, index, parts) => parts.slice(0, index + 1).join('/'));
 export const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const slug = value => String(value).normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'note';
 
 // A deliberately small, documented front-matter format. Values are plain strings
 // or JSON strings/arrays/booleans; unsupported YAML fails instead of guessing.
-export function parsePost(source, filename = '文章') {
+export function parsePost(source, filename = '文章', folderCategory) {
   const match = source.replace(/^\uFEFF/, '').match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
   if (!match) throw new Error(`${filename}：文章开头需要 --- 元信息 ---`);
   const meta = {};
@@ -38,10 +60,12 @@ export function parsePost(source, filename = '文章') {
     try { meta[pair[1]] = /^(?:["\[{]|true$|false$|null$)/.test(raw) ? JSON.parse(raw) : raw; }
     catch { throw new Error(`${filename}：${pair[1]} 的格式错误，字符串请用双引号，标签请用 JSON 数组`); }
   }
-  for (const key of ['title', 'date', 'category']) {
+  for (const key of ['title', 'date']) {
     if (typeof meta[key] !== 'string' || !meta[key].trim()) throw new Error(`${filename}：缺少 ${key}`);
   }
-  if (!Object.hasOwn(categories, meta.category)) throw new Error(`${filename}：分类只能是${Object.keys(categories).map(name => `“${name}”`).join('、')}`);
+  // Existing category fields remain readable, but folder membership wins.
+  const category = folderCategory ?? meta.category ?? '未分类';
+  if (!validCategoryPath(category)) throw new Error(`${filename}：分类目录名称不合法`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.date) || !Number.isFinite(Date.parse(meta.date)) || new Date(meta.date).toISOString().slice(0, 10) !== meta.date) throw new Error(`${filename}：日期必须是有效的 YYYY-MM-DD`);
   if (meta.draft !== undefined && typeof meta.draft !== 'boolean') throw new Error(`${filename}：draft 只能是 true 或 false`);
   if (meta.tags !== undefined && (!Array.isArray(meta.tags) || meta.tags.some(t => typeof t !== 'string'))) throw new Error(`${filename}：tags 必须是字符串数组`);
@@ -49,7 +73,7 @@ export function parsePost(source, filename = '文章') {
   if (meta.permalink !== undefined && typeof meta.permalink !== 'string') throw new Error(`${filename}：permalink 必须是字符串`);
   const url = meta.permalink || `/${meta.date.replaceAll('-', '/')}/${slug(path.basename(filename, '.md').replace(/^\d{4}-\d{2}-\d{2}-/, ''))}/`;
   if (!/^\/\d{4}\/\d{2}\/\d{2}\/[^/]+\/$/.test(url) || /[%\\?#\u0000-\u001f]/.test(url) || url.split('/').some(p => p === '.' || p === '..')) throw new Error(`${filename}：permalink 应为 /年/月/日/文章名称/，不可包含路径跳转或 URL 转义`);
-  return { ...meta, tags: meta.tags || [], summary: meta.summary || '', url, markdown: match[2], filename };
+  return { ...meta, category, tags: meta.tags || [], summary: meta.summary || '', url, markdown: match[2], filename };
 }
 
 export function renderMarkdown(source) {
@@ -76,18 +100,19 @@ export function renderMarkdown(source) {
 
 export function readPosts(root, { drafts = false } = {}) {
   const files = [];
-  function walk(dir, isDraft) {
+  function walk(dir, isDraft, category = '') {
     if (!fs.existsSync(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full, isDraft);
-      else if (entry.isFile() && entry.name.endsWith('.md')) files.push({ full, isDraft });
+      if (entry.isDirectory()) walk(full, isDraft, category ? `${category}/${entry.name}` : entry.name);
+      else if (entry.isFile() && entry.name.endsWith('.md')) files.push({ full, isDraft, category: category || '未分类' });
     }
   }
   walk(path.join(root, '文章'), false);
   if (drafts) walk(path.join(root, '草稿'), true);
-  const posts = files.map(({ full, isDraft }) => {
-    const post = parsePost(fs.readFileSync(full, 'utf8'), full);
+  const posts = files.map(({ full, isDraft, category }) => {
+    const post = parsePost(fs.readFileSync(full, 'utf8'), full, category);
     return { ...post, draft: isDraft || post.draft === true };
   }).filter(post => drafts || !post.draft).sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title, 'zh-CN'));
   const urls = new Set();

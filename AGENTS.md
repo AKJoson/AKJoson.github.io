@@ -1,7 +1,7 @@
 # 博客维护约定
 
 - 此目录对应 `AKJoson/AKJoson.github.io`，站点为 `https://akjoson.github.io`，原默认分支是 `master`。
-- 正式文章源文件放在 `文章/技术/`、`文章/日常随想/` 或 `文章/读书感悟/`，使用 README 说明的 Markdown 元信息格式。技术实践归入“技术”，生活感受归入“日常随想”，阅读摘记与思考归入“读书感悟”。分类定义集中在 `tooling/content.mjs` 的 `categoryDetails`。
+- 正式文章放在 `文章/` 下，文件夹名称和层级是分类的唯一来源。例如 `文章/计算机/Kotlin/笔记.md` 属于“计算机 / Kotlin”。新增、重命名或移动文件夹即可调整分类，不要再维护手写分类配置或 `category` 字段。旧 `category` 字段会被目录归属覆盖。父分类汇总所有子目录，空目录自动添加 `.gitkeep` 以便同步。
 - 未完成的文章放在被 Git 忽略的 `草稿/`。不要把本地草稿、原始 `FreeRTOS/` 笔记或 `.preview-site/` 预览上传。
 - 只编辑 Markdown、`theme/` 和 `assets/` 等源文件；根目录首页、年份目录里的文章 HTML、分类与归档页由 `npm run build` 生成。
 - 保留旧文章的 `permalink` 和原有标题锚点，避免让外部链接失效。文章图片统一放在 `images/`。
