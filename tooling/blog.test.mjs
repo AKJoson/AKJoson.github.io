@@ -85,3 +85,21 @@ test('摘要和标题中的 HTML 作为文字输出', t => {
   assert.doesNotMatch(html, /<img src=x|<script>alert/);
   assert.match(html, /&lt;script&gt;/);
 });
+
+test('读书文章出现在首页、专属分类、归档与订阅中，使用读书页签', t => {
+  const dir = fixture(t);
+  fs.mkdirSync(path.join(dir, '文章/读书感悟'), { recursive: true });
+  const reading = source('', '## 读完之后\n\n书里的一句话。').replace('category: "技术"', 'category: "读书感悟"').replace('测试文章', '活着读后感');
+  fs.writeFileSync(path.join(dir, '文章/读书感悟/reading-note.md'), reading);
+  build({ root: dir });
+  const read = file => fs.readFileSync(path.join(dir, file), 'utf8');
+  for (const file of ['index.html', 'categories/reading/index.html', 'archives/index.html', 'atom.xml']) assert.match(read(file), /活着读后感/);
+  assert.doesNotMatch(read('categories/tech/index.html'), /活着读后感/);
+  assert.doesNotMatch(read('categories/life/index.html'), /活着读后感/);
+  assert.match(read('categories/reading/index.html'), /NOTES ON READING/);
+  assert.match(read('categories/reading/index.html'), /href="\/categories\/reading\/" class="active" aria-current="page"/);
+  assert.match(read('2026/10/02/reading-note/index.html'), /<p class="eyebrow">READING<\/p>/);
+  assert.match(read('about/index.html'), /读书感悟/);
+  assert.match(read('sitemap.xml'), /categories\/reading\//);
+  assert.doesNotMatch(read('index.html'), /\{\{CATEGORY_LINKS\}\}/);
+});

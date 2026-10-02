@@ -2,7 +2,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import MarkdownIt from './vendor/markdown-it.cjs';
 
-export const categories = { '技术': 'tech', '日常随想': 'life' };
+export const categoryDetails = {
+  '技术': {
+    slug: 'tech', label: 'TECHNOLOGY', icon: '⌘',
+    summary: '探索、实践与问题的解法',
+    description: '探索、实践，以及那些终于想明白的问题。'
+  },
+  '日常随想': {
+    slug: 'life', label: 'EVERYDAY LIFE', icon: '✳',
+    summary: '生活、观察与偶尔的灵感',
+    description: '把日常里的小事，写成值得回看的片段。'
+  },
+  '读书感悟': {
+    slug: 'reading', label: 'READING', icon: '▤',
+    summary: '阅读、摘记与自己的思考',
+    description: '在书页之间，遇见新的想法，也读懂一点自己。'
+  }
+};
+export const categories = Object.fromEntries(Object.entries(categoryDetails).map(([name, details]) => [name, details.slug]));
 export const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const slug = value => String(value).normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'note';
 
@@ -24,7 +41,7 @@ export function parsePost(source, filename = '文章') {
   for (const key of ['title', 'date', 'category']) {
     if (typeof meta[key] !== 'string' || !meta[key].trim()) throw new Error(`${filename}：缺少 ${key}`);
   }
-  if (!Object.hasOwn(categories, meta.category)) throw new Error(`${filename}：分类只能是“技术”或“日常随想”`);
+  if (!Object.hasOwn(categories, meta.category)) throw new Error(`${filename}：分类只能是${Object.keys(categories).map(name => `“${name}”`).join('、')}`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.date) || !Number.isFinite(Date.parse(meta.date)) || new Date(meta.date).toISOString().slice(0, 10) !== meta.date) throw new Error(`${filename}：日期必须是有效的 YYYY-MM-DD`);
   if (meta.draft !== undefined && typeof meta.draft !== 'boolean') throw new Error(`${filename}：draft 只能是 true 或 false`);
   if (meta.tags !== undefined && (!Array.isArray(meta.tags) || meta.tags.some(t => typeof t !== 'string'))) throw new Error(`${filename}：tags 必须是字符串数组`);

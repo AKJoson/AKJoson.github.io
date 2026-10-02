@@ -8,7 +8,7 @@ import { createRenderer } from './render.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const preserved = ['privacy-policy.html', 'privacy-police-droidbrid.html', 'privacy-police-droidbridge', 'support.html', 'supportdb.html', 'app-ads.txt'];
-const managed = name => ['index.html', '404.html', 'about/index.html', 'atom.xml', 'sitemap.xml', 'robots.txt'].includes(name) || /^(?:\d{4}\/\d{2}\/\d{2}\/[^/]+|archives(?:\/\d{4}(?:\/\d{2})?)?|categories\/(?:tech|life))\/index\.html$/.test(name);
+const managed = name => ['index.html', '404.html', 'about/index.html', 'atom.xml', 'sitemap.xml', 'robots.txt'].includes(name) || /^(?:\d{4}\/\d{2}\/\d{2}\/[^/]+|archives(?:\/\d{4}(?:\/\d{2})?)?|categories\/[a-z0-9-]+)\/index\.html$/.test(name);
 
 export function build({ root = ROOT, out = root, drafts = false } = {}) {
   if (drafts && path.resolve(root) === path.resolve(out)) throw new Error('草稿只能构建到独立的预览目录，不能写入发布目录。');
@@ -61,7 +61,7 @@ export function build({ root = ROOT, out = root, drafts = false } = {}) {
 function newPost(args) {
   const [category, ...words] = args;
   const title = words.join(' ').trim();
-  if (!Object.hasOwn(categories, category) || !title) throw new Error('用法：npm run new -- 技术 "文章标题"（也可以使用“日常随想”）');
+  if (!Object.hasOwn(categories, category) || !title) throw new Error(`用法：npm run new -- 分类 "文章标题"（可用分类：${Object.keys(categories).join('、')}）`);
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const file = path.join(ROOT, '草稿', category, `${date}-${slug(title).slice(0, 80)}.md`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
