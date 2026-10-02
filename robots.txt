@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /tooling/
+Disallow: /theme/
+Disallow: /文章/
+Sitemap: https://akjoson.github.io/sitemap.xml

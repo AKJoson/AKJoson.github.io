@@ -1,247 +1,384 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  
-  
-  <title>C/C++基础之三(指针引起的内存泄露) | 在这个娱乐至死的时代，把握好你仅有的时间和才能！</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。123456789101112131415161718192021222324252627282930#include &lt;iostream&gt;using namespace std;class Person&#123;private:    int age;public:    &#x2F;&#x2F; 构造函数    Pe">
-<meta property="og:type" content="article">
-<meta property="og:title" content="C&#x2F;C++基础之三(指针引起的内存泄露)">
-<meta property="og:url" content="http://example.com/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/index.html">
-<meta property="og:site_name" content="在这个娱乐至死的时代，把握好你仅有的时间和才能！">
-<meta property="og:description" content="注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。123456789101112131415161718192021222324252627282930#include &lt;iostream&gt;using namespace std;class Person&#123;private:    int age;public:    &#x2F;&#x2F; 构造函数    Pe">
-<meta property="og:locale" content="en_US">
-<meta property="article:published_time" content="2025-09-09T08:33:38.000Z">
-<meta property="article:modified_time" content="2025-09-09T08:34:36.373Z">
-<meta property="article:author" content="Cherry">
-<meta name="twitter:card" content="summary">
-  
-    <link rel="alternate" href="/atom.xml" title="在这个娱乐至死的时代，把握好你仅有的时间和才能！" type="application/atom+xml">
-  
-  
-    <link rel="shortcut icon" href="/favicon.png">
-  
-  
-  
-<link rel="stylesheet" href="/css/style.css">
-
-  
-    
-<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
-
-  
-  
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
-
-<meta name="generator" content="Hexo 7.3.0"></head>
-
-<body>
-  <div id="container">
-    <div id="wrap">
-      <header id="header">
-  <div id="banner"></div>
-  <div id="header-outer" class="outer">
-    <div id="header-title" class="inner">
-      <h1 id="logo-wrap">
-        <a href="/" id="logo">在这个娱乐至死的时代，把握好你仅有的时间和才能！</a>
-      </h1>
-      
-        <h2 id="subtitle-wrap">
-          <a href="/" id="subtitle">人活在世上，不但有身体，还有头脑和心胸。——王小波</a>
-        </h2>
-      
-    </div>
-    <div id="header-inner" class="inner">
-      <nav id="main-nav">
-        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
-        
-          <a class="main-nav-link" href="/">Home</a>
-        
-          <a class="main-nav-link" href="/archives">Archives</a>
-        
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>C/C++基础之三(指针引起的内存泄露) · CherryBLOG</title><meta name="description" content="从一次指针导致的内存泄漏开始，逐步理解对象生命周期、智能指针与引用计数。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/"><meta property="og:type" content="article"><meta property="og:title" content="C/C++基础之三(指针引起的内存泄露)"><meta property="og:description" content="从一次指针导致的内存泄漏开始，逐步理解对象生命周期、智能指针与引用计数。"><meta property="og:url" content="https://akjoson.github.io/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/"><meta property="og:site_name" content="CherryBLOG"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2025-09-09T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="CherryBLOG" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="CherryBLOG 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        Cherry<span>BLOG</span><span class="wordmark-dot">.</span>
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
       </nav>
-      <nav id="sub-nav">
-        
-        
-          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
-        
-        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
-      </nav>
-      <div id="search-form-wrap">
-        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
-      </div>
-    </div>
-  </div>
-</header>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><div class="post-breadcrumb"><a href="/">文章</a><span>/</span><a href="/categories/tech/">技术</a></div><header class="post-header"><p class="eyebrow">TECHNOLOGY</p><h1>C/C++基础之三(指针引起的内存泄露)</h1><div class="post-meta"><span>Cherry</span><time datetime="2025-09-09">2025-09-09</time><span>约 12 分钟阅读</span></div><div class="tags"><span>C++</span><span>内存管理</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-注意观察下面的代码-如果new出来的对象忘记被delete释放-是会发生内存泄漏的">注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。</a></li><li><a href="#section-那么如何让使用指针不必有那么大的心智负担了-因为局部变量使用之后-程序会自动帮我调用其析构函数-因此我们要将指针变量的创建修改修改">那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改：</a></li><li><a href="#section-输出如下-可以看到我们并没有主动delete-程序就避免了内存泄漏">输出如下,可以看到我们并没有主动delete,程序就避免了内存泄漏。</a></li><li><a href="#section-接下来我们继续改进">接下来我们继续改进：</a></li><li><a href="#section-输出如下-程序发生了崩溃-因为两次进行delete-p">输出如下,程序发生了崩溃，因为两次进行delete p;</a></li><li><a href="#section-没事-遇事不要慌-东西都在后备箱-看我们的破解大法">没事，遇事不要慌，东西都在后备箱,看我们的破解大法</a></li><li><a href="#section-person只new了一个-因此也只析构了一次-程序正确">Person只new了一个，因此也只析构了一次，程序正确：</a></li><li><a href="#section-程序似乎还不够优美-1-引用计数写在person里面的-2-如果换一个类怎么办了">程序似乎还不够优美，1. 引用计数写在Person里面的 2. 如果换一个类怎么办了？</a></li><li><a href="#section-输出">输出</a></li><li><a href="#section-那么到这里是否就结束了呢-no-并没有-实际上这个代码是线程不安全的-android源码中就有很好的例子-sync-fetch-and-add就是确保线程安全">那么到这里是否就结束了呢？No, 并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，__sync_fetch_and_add就是确保线程安全。</a></li></ol></details><article class="prose"><p><a id="注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。"></a></p>
+<h5 id="section-注意观察下面的代码-如果new出来的对象忘记被delete释放-是会发生内存泄漏的">注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。</h5>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">#include &lt;iostream&gt;
 
-      <div class="outer">
-        <section id="main"><article id="post-C-C-基础之三-指针引起的内存泄露" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/" class="article-date">
-  <time class="dt-published" datetime="2025-09-09T08:33:38.000Z" itemprop="datePublished">2025-09-09</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 class="p-name article-title" itemprop="headline name">
-      C/C++基础之三(指针引起的内存泄露)
-    </h1>
-  
+using namespace std;
 
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h5 id="注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。"><a href="#注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。" class="headerlink" title="注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。"></a>注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。</h5><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Person</span>&#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="comment">// 构造函数</span></span><br><span class="line">    <span class="built_in">Person</span>()&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Person()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">print_info</span><span class="params">()</span></span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;person_info&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//析构函数</span></span><br><span class="line">    ~<span class="built_in">Person</span>()&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;~Person()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">test_func</span><span class="params">()</span></span>&#123;</span><br><span class="line">    Person *p = <span class="keyword">new</span> <span class="built_in">Person</span>();</span><br><span class="line">    p-&gt;<span class="built_in">print_info</span>();</span><br><span class="line">    <span class="comment">// delete p;</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="built_in">test_func</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h5 id="那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改："><a href="#那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改：" class="headerlink" title="那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改："></a>那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改：</h5><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//引入sp,其意为SmartPoint</span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">sp</span>&#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    Person *p;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">sp</span>()&#123;</span><br><span class="line">        p = <span class="literal">NULL</span>;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;sp()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sp</span>(Person *other)&#123;</span><br><span class="line">        <span class="keyword">this</span>-&gt;p = other;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;sp(Person *other)&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~<span class="built_in">sp</span>()&#123;</span><br><span class="line">        <span class="keyword">if</span> (p)</span><br><span class="line">        &#123;</span><br><span class="line">           <span class="keyword">delete</span> p;</span><br><span class="line">        &#125;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;~sp()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 对 -&gt; 操作符进行重载</span></span><br><span class="line">    Person* <span class="keyword">operator</span>-&gt;()&#123;</span><br><span class="line">        <span class="keyword">return</span> p;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">test_func</span><span class="params">()</span></span>&#123;</span><br><span class="line">    sp s = <span class="keyword">new</span> <span class="built_in">Person</span>();</span><br><span class="line">    s-&gt;<span class="built_in">print_info</span>();</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-<h5 id="输出如下-可以看到我们并没有主动delete-程序就避免了内存泄漏。"><a href="#输出如下-可以看到我们并没有主动delete-程序就避免了内存泄漏。" class="headerlink" title="输出如下,可以看到我们并没有主动delete,程序就避免了内存泄漏。"></a>输出如下,可以看到我们并没有主动delete,程序就避免了内存泄漏。</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Person()</span><br><span class="line">sp(Person *other)</span><br><span class="line">person_info</span><br><span class="line">~Person()</span><br><span class="line">~sp()</span><br></pre></td></tr></table></figure>
-<h5 id="接下来我们继续改进："><a href="#接下来我们继续改进：" class="headerlink" title="接下来我们继续改进："></a>接下来我们继续改进：</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">    sp(Person *other)&#123;</span><br><span class="line">        this-&gt;p = other;</span><br><span class="line">        cout &lt;&lt; &quot;sp(Person *other)&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    // const是不能少的，</span><br><span class="line">    sp(const sp &amp;other)&#123;</span><br><span class="line">        this-&gt;p = other.p;</span><br><span class="line">        cout &lt;&lt; &quot; sp(sp *other)&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~sp()&#123;</span><br><span class="line">        if (p)</span><br><span class="line">        &#123;</span><br><span class="line">           delete p;</span><br><span class="line">        &#125;</span><br><span class="line">        cout &lt;&lt; &quot;~sp()&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    // 对 -&gt; 操作符进行重载</span><br><span class="line">    Person* operator-&gt;()&#123;</span><br><span class="line">        return p;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">void test_func(sp&amp; s1)&#123;</span><br><span class="line">    // 会调用拷贝构造函数:sp(const sp &amp;other)</span><br><span class="line">    sp s = s1; // 这是初始化，而不是赋值 ，赋值是:sp s; s = s1;  赋值会调用operator= 操作符函数，初始化会调用拷贝构造函数</span><br><span class="line">    s-&gt;print_info();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">int main()&#123;</span><br><span class="line"></span><br><span class="line">    sp s = new Person();</span><br><span class="line">    for(int i=0;i&lt;2;i++)&#123;</span><br><span class="line">        test_func(s);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h5 id="输出如下-程序发生了崩溃，因为两次进行delete-p"><a href="#输出如下-程序发生了崩溃，因为两次进行delete-p" class="headerlink" title="输出如下,程序发生了崩溃，因为两次进行delete p;"></a>输出如下,程序发生了崩溃，因为两次进行delete p;</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Person()</span><br><span class="line">sp(Person *other)</span><br><span class="line"> sp(const sp *other)</span><br><span class="line">person_info</span><br><span class="line">~Person()</span><br><span class="line">~sp()</span><br><span class="line"> sp(const sp *other)</span><br><span class="line">person_info</span><br><span class="line">~Person()</span><br></pre></td></tr></table></figure>
-<h5 id="没事，遇事不要慌，东西都在后备箱-看我们的破解大法"><a href="#没事，遇事不要慌，东西都在后备箱-看我们的破解大法" class="headerlink" title="没事，遇事不要慌，东西都在后备箱,看我们的破解大法"></a>没事，遇事不要慌，东西都在后备箱,看我们的破解大法</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br></pre></td><td class="code"><pre><span class="line">class Person&#123;</span><br><span class="line">private:</span><br><span class="line">    int age;</span><br><span class="line">    int count;</span><br><span class="line">public:</span><br><span class="line">    // 构造函数</span><br><span class="line">    Person()&#123;</span><br><span class="line">        cout &lt;&lt; &quot;Person()&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    //增加引用计数</span><br><span class="line">    void incCount()&#123;</span><br><span class="line">        this-&gt;count++;</span><br><span class="line">    &#125;</span><br><span class="line">    //减少引用计数</span><br><span class="line">    void decCount()&#123;</span><br><span class="line">        this-&gt;count--;</span><br><span class="line">    &#125;</span><br><span class="line">    // 获取引用计数</span><br><span class="line">    int getCount()&#123;</span><br><span class="line">        return this-&gt;count;</span><br><span class="line">    &#125;</span><br><span class="line">    void print_info()&#123;</span><br><span class="line">        cout &lt;&lt; &quot;person_info&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    //析构函数</span><br><span class="line">    ~Person()&#123;</span><br><span class="line">        cout &lt;&lt; &quot;~Person()&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">//引入sp,其意为SmartPoint</span><br><span class="line">class sp&#123;</span><br><span class="line">private:</span><br><span class="line">    Person *p;</span><br><span class="line">public:</span><br><span class="line">    sp()&#123;</span><br><span class="line">        p = NULL;</span><br><span class="line">        cout &lt;&lt; &quot;sp()&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    sp(Person *other)&#123;</span><br><span class="line">        this-&gt;p = other;</span><br><span class="line">        this-&gt;p-&gt;incCount();</span><br><span class="line">        cout &lt;&lt; &quot;sp(Person *other)&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    // const是不能少的，</span><br><span class="line">    sp(const sp &amp;other)&#123;</span><br><span class="line">        this-&gt;p = other.p;</span><br><span class="line">        this-&gt;p-&gt;incCount();</span><br><span class="line">        cout &lt;&lt; &quot; sp(const sp *other)&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~sp()&#123;</span><br><span class="line">        if (p)</span><br><span class="line">        &#123;</span><br><span class="line">            if (p-&gt;getCount()&gt;1)</span><br><span class="line">            &#123;   //存在多个引用</span><br><span class="line">                p-&gt;decCount();</span><br><span class="line">            &#125;else&#123;</span><br><span class="line">                delete p;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        cout &lt;&lt; &quot;~sp()&quot; &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    // 对 -&gt; 操作符进行重载</span><br><span class="line">    Person* operator-&gt;()&#123;</span><br><span class="line">        return p;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<h4 id="Person只new了一个，因此也只析构了一次，程序正确："><a href="#Person只new了一个，因此也只析构了一次，程序正确：" class="headerlink" title="Person只new了一个，因此也只析构了一次，程序正确："></a>Person只new了一个，因此也只析构了一次，程序正确：</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Person()</span><br><span class="line">sp(Person *other)</span><br><span class="line"> sp(const sp *other)</span><br><span class="line">person_info</span><br><span class="line">~sp()</span><br><span class="line"> sp(const sp *other)</span><br><span class="line">person_info</span><br><span class="line">~sp()</span><br><span class="line">~Person()</span><br><span class="line">~sp()</span><br></pre></td></tr></table></figure>
-<h5 id="程序似乎还不够优美，1-引用计数写在Person里面的-2-如果换一个类怎么办了？"><a href="#程序似乎还不够优美，1-引用计数写在Person里面的-2-如果换一个类怎么办了？" class="headerlink" title="程序似乎还不够优美，1. 引用计数写在Person里面的 2. 如果换一个类怎么办了？"></a>程序似乎还不够优美，1. 引用计数写在Person里面的 2. 如果换一个类怎么办了？</h5><ol>
-<li>引入RefBase基类用于计数</li>
-<li>使用模板类实现任意对象的自定义只能指针</li>
+class Person{
+private:
+    int age;
+public:
+    // 构造函数
+    Person(){
+        cout &lt;&lt; &quot;Person()&quot; &lt;&lt; endl;
+    }
+    void print_info(){
+        cout &lt;&lt; &quot;person_info&quot; &lt;&lt; endl;
+    }
+    //析构函数
+    ~Person(){
+        cout &lt;&lt; &quot;~Person()&quot; &lt;&lt; endl;
+    }
+};
+
+void test_func(){
+    Person *p = new Person();
+    p-&gt;print_info();
+    // delete p;
+}
+
+int main(){
+    test_func();
+}
+</code></pre></div>
+<p><a id="那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改："></a></p>
+<h5 id="section-那么如何让使用指针不必有那么大的心智负担了-因为局部变量使用之后-程序会自动帮我调用其析构函数-因此我们要将指针变量的创建修改修改">那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改：</h5>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">//引入sp,其意为SmartPoint
+class sp{
+private:
+    Person *p;
+public:
+    sp(){
+        p = NULL;
+        cout &lt;&lt; &quot;sp()&quot; &lt;&lt; endl;
+    }
+
+    sp(Person *other){
+        this-&gt;p = other;
+        cout &lt;&lt; &quot;sp(Person *other)&quot; &lt;&lt; endl;
+    }
+
+    ~sp(){
+        if (p)
+        {
+           delete p;
+        }
+        cout &lt;&lt; &quot;~sp()&quot; &lt;&lt; endl;
+    }
+
+    // 对 -&gt; 操作符进行重载
+    Person* operator-&gt;(){
+        return p;
+    }
+
+};
+
+
+void test_func(){
+    sp s = new Person();
+    s-&gt;print_info();
+}
+</code></pre></div>
+<p><a id="输出如下-可以看到我们并没有主动delete-程序就避免了内存泄漏。"></a></p>
+<h5 id="section-输出如下-可以看到我们并没有主动delete-程序就避免了内存泄漏">输出如下,可以看到我们并没有主动delete,程序就避免了内存泄漏。</h5>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">Person()
+sp(Person *other)
+person_info
+~Person()
+~sp()
+</code></pre></div>
+<p><a id="接下来我们继续改进："></a></p>
+<h5 id="section-接下来我们继续改进">接下来我们继续改进：</h5>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">    sp(Person *other){
+        this-&gt;p = other;
+        cout &lt;&lt; &quot;sp(Person *other)&quot; &lt;&lt; endl;
+    }
+    // const是不能少的，
+    sp(const sp &amp;other){
+        this-&gt;p = other.p;
+        cout &lt;&lt; &quot; sp(sp *other)&quot; &lt;&lt; endl;
+    }
+
+    ~sp(){
+        if (p)
+        {
+           delete p;
+        }
+        cout &lt;&lt; &quot;~sp()&quot; &lt;&lt; endl;
+    }
+
+    // 对 -&gt; 操作符进行重载
+    Person* operator-&gt;(){
+        return p;
+    }
+
+};
+
+
+void test_func(sp&amp; s1){
+    // 会调用拷贝构造函数:sp(const sp &amp;other)
+    sp s = s1; // 这是初始化，而不是赋值 ，赋值是:sp s; s = s1;  赋值会调用operator= 操作符函数，初始化会调用拷贝构造函数
+    s-&gt;print_info();
+}
+
+int main(){
+
+    sp s = new Person();
+    for(int i=0;i&lt;2;i++){
+        test_func(s);
+    }
+
+}
+</code></pre></div>
+<p><a id="输出如下-程序发生了崩溃，因为两次进行delete-p"></a></p>
+<h5 id="section-输出如下-程序发生了崩溃-因为两次进行delete-p">输出如下,程序发生了崩溃，因为两次进行delete p;</h5>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">Person()
+sp(Person *other)
+ sp(const sp *other)
+person_info
+~Person()
+~sp()
+ sp(const sp *other)
+person_info
+~Person()
+</code></pre></div>
+<p><a id="没事，遇事不要慌，东西都在后备箱-看我们的破解大法"></a></p>
+<h5 id="section-没事-遇事不要慌-东西都在后备箱-看我们的破解大法">没事，遇事不要慌，东西都在后备箱,看我们的破解大法</h5>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">class Person{
+private:
+    int age;
+    int count;
+public:
+    // 构造函数
+    Person(){
+        cout &lt;&lt; &quot;Person()&quot; &lt;&lt; endl;
+    }
+    //增加引用计数
+    void incCount(){
+        this-&gt;count++;
+    }
+    //减少引用计数
+    void decCount(){
+        this-&gt;count--;
+    }
+    // 获取引用计数
+    int getCount(){
+        return this-&gt;count;
+    }
+    void print_info(){
+        cout &lt;&lt; &quot;person_info&quot; &lt;&lt; endl;
+    }
+    //析构函数
+    ~Person(){
+        cout &lt;&lt; &quot;~Person()&quot; &lt;&lt; endl;
+    }
+};
+
+//引入sp,其意为SmartPoint
+class sp{
+private:
+    Person *p;
+public:
+    sp(){
+        p = NULL;
+        cout &lt;&lt; &quot;sp()&quot; &lt;&lt; endl;
+    }
+
+    sp(Person *other){
+        this-&gt;p = other;
+        this-&gt;p-&gt;incCount();
+        cout &lt;&lt; &quot;sp(Person *other)&quot; &lt;&lt; endl;
+    }
+    // const是不能少的，
+    sp(const sp &amp;other){
+        this-&gt;p = other.p;
+        this-&gt;p-&gt;incCount();
+        cout &lt;&lt; &quot; sp(const sp *other)&quot; &lt;&lt; endl;
+    }
+
+    ~sp(){
+        if (p)
+        {
+            if (p-&gt;getCount()&gt;1)
+            {   //存在多个引用
+                p-&gt;decCount();
+            }else{
+                delete p;
+            }
+        }
+        cout &lt;&lt; &quot;~sp()&quot; &lt;&lt; endl;
+    }
+
+    // 对 -&gt; 操作符进行重载
+    Person* operator-&gt;(){
+        return p;
+    }
+
+};
+</code></pre></div>
+<p><a id="Person只new了一个，因此也只析构了一次，程序正确："></a></p>
+<h4 id="section-person只new了一个-因此也只析构了一次-程序正确">Person只new了一个，因此也只析构了一次，程序正确：</h4>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">Person()
+sp(Person *other)
+ sp(const sp *other)
+person_info
+~sp()
+ sp(const sp *other)
+person_info
+~sp()
+~Person()
+~sp()
+</code></pre></div>
+<p><a id="程序似乎还不够优美，1-引用计数写在Person里面的-2-如果换一个类怎么办了？"></a></p>
+<h5 id="section-程序似乎还不够优美-1-引用计数写在person里面的-2-如果换一个类怎么办了">程序似乎还不够优美，1. 引用计数写在Person里面的 2. 如果换一个类怎么办了？</h5>
+<ol>
+<li>
+<p>引入RefBase基类用于计数</p>
+</li>
+<li>
+<p>使用模板类实现任意对象的自定义只能指针</p>
+</li>
 </ol>
-<p> 一切尽在不言中，上代码</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">RefBase</span>&#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> count; <span class="comment">//构造对象时不初始化会得到一个无法想象的结果</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line"></span><br><span class="line">    <span class="built_in">RefBase</span>():<span class="built_in">count</span>(<span class="number">0</span>)&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;RefBase()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">incCount</span><span class="params">()</span></span>&#123;</span><br><span class="line">        <span class="keyword">this</span>-&gt;count++;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">decCount</span><span class="params">()</span></span>&#123;</span><br><span class="line">        <span class="keyword">this</span>-&gt;count--;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">getCount</span><span class="params">()</span></span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">this</span>-&gt;count;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">virtual</span> ~<span class="built_in">RefBase</span>()&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;~RefBase&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Person</span> : <span class="keyword">public</span> RefBase&#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="comment">// 构造函数</span></span><br><span class="line">    <span class="built_in">Person</span>()&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;Person()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="type">void</span> <span class="title">print_info</span><span class="params">()</span></span>&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;person_info&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//析构函数</span></span><br><span class="line">    ~<span class="built_in">Person</span>()&#123;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;~Person()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">//引入sp,其意为SmartPoint</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="keyword">class</span> <span class="title class_">sp</span>&#123;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    T *p;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">sp</span>()&#123;</span><br><span class="line">        p = <span class="literal">NULL</span>;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;sp()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">sp</span>(T *other)&#123;</span><br><span class="line">        <span class="keyword">this</span>-&gt;p = other;</span><br><span class="line">        <span class="keyword">this</span>-&gt;p-&gt;<span class="built_in">incCount</span>();</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;sp(Person *other)&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// const是不能少的， 拷贝构造函数：sp s2 = s1;  sp s3(s1); 这两种创建对象的方式都会调用拷贝构造函数;  sp s4； s4 = s1; 这种写法只会调用 operator= 操作符函数</span></span><br><span class="line">    <span class="built_in">sp</span>(<span class="type">const</span> sp &amp;other)&#123;</span><br><span class="line">        <span class="keyword">this</span>-&gt;p = other.p; <span class="comment">// 指针的直接拷贝</span></span><br><span class="line">        <span class="keyword">this</span>-&gt;p-&gt;<span class="built_in">incCount</span>();</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot; sp(const sp *other)&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~<span class="built_in">sp</span>()&#123;</span><br><span class="line">        <span class="keyword">if</span> (p)</span><br><span class="line">        &#123;</span><br><span class="line">            cout &lt;&lt; <span class="string">&quot;value is :&quot;</span> &lt;&lt; p-&gt;<span class="built_in">getCount</span>() &lt;&lt; endl;</span><br><span class="line">            <span class="keyword">if</span> (p-&gt;<span class="built_in">getCount</span>()&gt;<span class="number">1</span>)</span><br><span class="line">            &#123;   <span class="comment">//存在多个引用</span></span><br><span class="line">                p-&gt;<span class="built_in">decCount</span>();</span><br><span class="line">            &#125;<span class="keyword">else</span>&#123;</span><br><span class="line">                <span class="keyword">delete</span> p;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        cout &lt;&lt; <span class="string">&quot;~sp()&quot;</span> &lt;&lt; endl;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 对 -&gt; 操作符进行重载，返回Person的指针</span></span><br><span class="line">    T* <span class="keyword">operator</span>-&gt;()&#123;</span><br><span class="line">        <span class="keyword">return</span> p;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span></span><br><span class="line"><span class="function"><span class="type">void</span> <span class="title">test_func</span><span class="params">(sp&lt;T&gt;&amp; s1)</span></span>&#123;</span><br><span class="line">    <span class="comment">// 会调用拷贝构造函数:sp(const sp &amp;other)</span></span><br><span class="line">    sp&lt;T&gt; s = s1; <span class="comment">// 这是初始化，而不是赋值 ，赋值是:sp s; s = s1;  赋值会调用operator= 操作符函数，初始化会调用拷贝构造函数</span></span><br><span class="line">    s-&gt;<span class="built_in">print_info</span>();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="comment">//只new了一次，</span></span><br><span class="line">    sp&lt;Person&gt; s = <span class="keyword">new</span> <span class="built_in">Person</span>();</span><br><span class="line">    <span class="comment">//test_func结束被释放两次？？？</span></span><br><span class="line">    <span class="keyword">for</span>(<span class="type">int</span> i=<span class="number">0</span>;i&lt;<span class="number">2</span>;i++)&#123;</span><br><span class="line">        <span class="built_in">test_func</span>(s);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h5 id="输出"><a href="#输出" class="headerlink" title="输出"></a>输出</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">RefBase</span><br><span class="line">Person()</span><br><span class="line">sp(Person *other)</span><br><span class="line"> sp(const sp *other)</span><br><span class="line">person_info</span><br><span class="line">value is :2</span><br><span class="line">~sp()</span><br><span class="line"> sp(const sp *other)</span><br><span class="line">person_info</span><br><span class="line">value is :2</span><br><span class="line">~sp()</span><br><span class="line">value is :1</span><br><span class="line">~Person()</span><br><span class="line">~RefBase</span><br><span class="line">~sp()</span><br></pre></td></tr></table></figure>
-<h4 id="那么到这里是否就结束了呢？No-并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，-sync-fetch-and-add就是确保线程安全。"><a href="#那么到这里是否就结束了呢？No-并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，-sync-fetch-and-add就是确保线程安全。" class="headerlink" title="那么到这里是否就结束了呢？No, 并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，__sync_fetch_and_add就是确保线程安全。"></a>那么到这里是否就结束了呢？No, 并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，__sync_fetch_and_add就是确保线程安全。</h4><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">inline</span> <span class="title">LightRefBase</span><span class="params">()</span> : mCount(<span class="number">0</span>) &#123;</span> &#125;</span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">void</span> <span class="title">incStrong</span><span class="params">(__attribute__((unused)) <span class="type">const</span> <span class="type">void</span>* id)</span> <span class="type">const</span> </span>&#123;</span><br><span class="line">    __sync_fetch_and_add(&amp;mCount, <span class="number">1</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">inline</span> <span class="type">void</span> <span class="title">decStrong</span><span class="params">(__attribute__((unused)) <span class="type">const</span> <span class="type">void</span>* id)</span> <span class="type">const</span> </span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (__sync_fetch_and_sub(&amp;mCount, <span class="number">1</span>) == <span class="number">1</span>) &#123;</span><br><span class="line">        <span class="keyword">delete</span> <span class="built_in">static_cast</span>&lt;<span class="type">const</span> T*&gt;(<span class="keyword">this</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="http://example.com/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/" data-id="cmfcay7q50003isu1amavaytd" data-title="C/C++基础之三(指针引起的内存泄露)" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-    
-<nav id="article-nav">
-  
-    <a href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/" id="article-nav-newer" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">Newer</strong>
-      <div class="article-nav-title">
-        
-          Flutter apk build success, build tool couldn&#39;t find it
-        
-      </div>
-    </a>
-  
-  
-    <a href="/2025/08/21/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%BA%8C/" id="article-nav-older" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">Older</strong>
-      <div class="article-nav-title">C/C++基础之二(类的构造函数)</div>
-    </a>
-  
-</nav>
+<p>一切尽在不言中，上代码</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">class RefBase{
+private:
+    int count; //构造对象时不初始化会得到一个无法想象的结果
+public:
 
-  
-</article>
+    RefBase():count(0){
+        cout &lt;&lt; &quot;RefBase()&quot; &lt;&lt; endl;
+    }
+
+    void incCount(){
+        this-&gt;count++;
+    }
+    void decCount(){
+        this-&gt;count--;
+    }
+    int getCount(){
+        return this-&gt;count;
+    }
+
+    virtual ~RefBase(){
+        cout &lt;&lt; &quot;~RefBase&quot; &lt;&lt; endl;
+    }
+
+};
 
 
-</section>
-        
-          <aside id="sidebar">
-  
-    
+class Person : public RefBase{
+private:
+    int age;
 
-  
-    
+public:
+    // 构造函数
+    Person(){
+        cout &lt;&lt; &quot;Person()&quot; &lt;&lt; endl;
+    }
+    void print_info(){
+        cout &lt;&lt; &quot;person_info&quot; &lt;&lt; endl;
+    }
+    //析构函数
+    ~Person(){
+        cout &lt;&lt; &quot;~Person()&quot; &lt;&lt; endl;
+    }
+};
 
-  
-    
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Archives</h3>
-    <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/12/">December 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/09/">September 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/08/">August 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">March 2025</a></li></ul>
-    </div>
-  </div>
+//引入sp,其意为SmartPoint
+template&lt;typename T&gt;
+class sp{
+private:
+    T *p;
+public:
+    sp(){
+        p = NULL;
+        cout &lt;&lt; &quot;sp()&quot; &lt;&lt; endl;
+    }
 
+    sp(T *other){
+        this-&gt;p = other;
+        this-&gt;p-&gt;incCount();
+        cout &lt;&lt; &quot;sp(Person *other)&quot; &lt;&lt; endl;
+    }
+    // const是不能少的， 拷贝构造函数：sp s2 = s1;  sp s3(s1); 这两种创建对象的方式都会调用拷贝构造函数;  sp s4； s4 = s1; 这种写法只会调用 operator= 操作符函数
+    sp(const sp &amp;other){
+        this-&gt;p = other.p; // 指针的直接拷贝
+        this-&gt;p-&gt;incCount();
+        cout &lt;&lt; &quot; sp(const sp *other)&quot; &lt;&lt; endl;
+    }
 
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Recent Posts</h3>
-    <div class="widget">
-      <ul>
-        
-          <li>
-            <a href="/2025/12/10/%E5%A6%82%E4%BD%95%E7%A7%BB%E9%99%A4jar%E5%8C%85%E7%AD%BE%E5%90%8D/">如何移除jar包签名</a>
-          </li>
-        
-          <li>
-            <a href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/">Flutter apk build success, build tool couldn&#39;t find it</a>
-          </li>
-        
-          <li>
-            <a href="/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/">C/C++基础之三(指针引起的内存泄露)</a>
-          </li>
-        
-          <li>
-            <a href="/2025/08/21/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%BA%8C/">C/C++基础之二(类的构造函数)</a>
-          </li>
-        
-          <li>
-            <a href="/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/">C/C++基础之一</a>
-          </li>
-        
-      </ul>
-    </div>
-  </div>
+    ~sp(){
+        if (p)
+        {
+            cout &lt;&lt; &quot;value is :&quot; &lt;&lt; p-&gt;getCount() &lt;&lt; endl;
+            if (p-&gt;getCount()&gt;1)
+            {   //存在多个引用
+                p-&gt;decCount();
+            }else{
+                delete p;
+            }
+        }
+        cout &lt;&lt; &quot;~sp()&quot; &lt;&lt; endl;
+    }
 
-  
-</aside>
-        
-      </div>
-      <footer id="footer">
-  
-  <div class="outer">
-    <div id="footer-info" class="inner">
-      
-      &copy; 2025 Cherry<br>
-      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
-    </div>
-  </div>
-</footer>
+    // 对 -&gt; 操作符进行重载，返回Person的指针
+    T* operator-&gt;(){
+        return p;
+    }
 
-    </div>
-    <nav id="mobile-nav">
-  
-    <a href="/" class="mobile-nav-link">Home</a>
-  
-    <a href="/archives" class="mobile-nav-link">Archives</a>
-  
-</nav>
-    
+};
 
+template&lt;typename T&gt;
+void test_func(sp&lt;T&gt;&amp; s1){
+    // 会调用拷贝构造函数:sp(const sp &amp;other)
+    sp&lt;T&gt; s = s1; // 这是初始化，而不是赋值 ，赋值是:sp s; s = s1;  赋值会调用operator= 操作符函数，初始化会调用拷贝构造函数
+    s-&gt;print_info();
+}
 
-<script src="/js/jquery-3.6.4.min.js"></script>
+int main(){
+    //只new了一次，
+    sp&lt;Person&gt; s = new Person();
+    //test_func结束被释放两次？？？
+    for(int i=0;i&lt;2;i++){
+        test_func(s);
+    }
 
-
-
-  
-<script src="/fancybox/jquery.fancybox.min.js"></script>
-
-
-
-
-<script src="/js/script.js"></script>
-
-
-
-
-
-  </div>
-</body>
-</html>
+}
+</code></pre></div>
+<p><a id="输出"></a></p>
+<h5 id="section-输出">输出</h5>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">RefBase
+Person()
+sp(Person *other)
+ sp(const sp *other)
+person_info
+value is :2
+~sp()
+ sp(const sp *other)
+person_info
+value is :2
+~sp()
+value is :1
+~Person()
+~RefBase
+~sp()
+</code></pre></div>
+<p><a id="那么到这里是否就结束了呢？No-并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，-sync-fetch-and-add就是确保线程安全。"></a></p>
+<h4 id="section-那么到这里是否就结束了呢-no-并没有-实际上这个代码是线程不安全的-android源码中就有很好的例子-sync-fetch-and-add就是确保线程安全">那么到这里是否就结束了呢？No, 并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，__sync_fetch_and_add就是确保线程安全。</h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">inline LightRefBase() : mCount(0) { }
+inline void incStrong(__attribute__((unused)) const void* id) const {
+    __sync_fetch_and_add(&amp;mCount, 1);
+}
+inline void decStrong(__attribute__((unused)) const void* id) const {
+    if (__sync_fetch_and_sub(&amp;mCount, 1) == 1) {
+        delete static_cast&lt;const T*&gt;(this);
+    }
+}
+</code></pre></div>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>感谢你读到这里。</p><a class="text-link" href="/categories/tech/">继续阅读技术 <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2025/08/21/C-C-基础之二/"><small>上一篇</small><strong>C/C++基础之二(类的构造函数)</strong></a><a href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/"><small>下一篇</small><strong>Flutter apk build success, build tool couldn&#39;t find it</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-5"><a href="#section-注意观察下面的代码-如果new出来的对象忘记被delete释放-是会发生内存泄漏的" title="注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。">注意观察下面的代码，如果new出来的对象忘记被delete释放，是会发生内存泄漏的。</a></li><li class="toc-level-5"><a href="#section-那么如何让使用指针不必有那么大的心智负担了-因为局部变量使用之后-程序会自动帮我调用其析构函数-因此我们要将指针变量的创建修改修改" title="那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改：">那么如何让使用指针不必有那么大的心智负担了？因为局部变量使用之后，程序会自动帮我调用其析构函数，因此我们要将指针变量的创建修改修改：</a></li><li class="toc-level-5"><a href="#section-输出如下-可以看到我们并没有主动delete-程序就避免了内存泄漏" title="输出如下,可以看到我们并没有主动delete,程序就避免了内存泄漏。">输出如下,可以看到我们并没有主动delete,程序就避免了内存泄漏。</a></li><li class="toc-level-5"><a href="#section-接下来我们继续改进" title="接下来我们继续改进：">接下来我们继续改进：</a></li><li class="toc-level-5"><a href="#section-输出如下-程序发生了崩溃-因为两次进行delete-p" title="输出如下,程序发生了崩溃，因为两次进行delete p;">输出如下,程序发生了崩溃，因为两次进行delete p;</a></li><li class="toc-level-5"><a href="#section-没事-遇事不要慌-东西都在后备箱-看我们的破解大法" title="没事，遇事不要慌，东西都在后备箱,看我们的破解大法">没事，遇事不要慌，东西都在后备箱,看我们的破解大法</a></li><li class="toc-level-4"><a href="#section-person只new了一个-因此也只析构了一次-程序正确" title="Person只new了一个，因此也只析构了一次，程序正确：">Person只new了一个，因此也只析构了一次，程序正确：</a></li><li class="toc-level-5"><a href="#section-程序似乎还不够优美-1-引用计数写在person里面的-2-如果换一个类怎么办了" title="程序似乎还不够优美，1. 引用计数写在Person里面的 2. 如果换一个类怎么办了？">程序似乎还不够优美，1. 引用计数写在Person里面的 2. 如果换一个类怎么办了？</a></li><li class="toc-level-5"><a href="#section-输出" title="输出">输出</a></li><li class="toc-level-4"><a href="#section-那么到这里是否就结束了呢-no-并没有-实际上这个代码是线程不安全的-android源码中就有很好的例子-sync-fetch-and-add就是确保线程安全" title="那么到这里是否就结束了呢？No, 并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，__sync_fetch_and_add就是确保线程安全。">那么到这里是否就结束了呢？No, 并没有，实际上这个代码是线程不安全的。Android源码中就有很好的例子，__sync_fetch_and_add就是确保线程安全。</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> CherryBLOG · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

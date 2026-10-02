@@ -1,241 +1,228 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  
-  
-  <title>C/C++基础之一 | 在这个娱乐至死的时代，把握好你仅有的时间和才能！</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="C&#x2F;C++基础之一(数据类型、数组、指针、结构体)Talk is cheap. Show me the code. 结构体定义  123456789101112131415161718192021222324#ifndef TYPEDEFINE_H#define TYPEDEFINE_H&#x2F;&#x2F;枚举的使用typedef enum&#123;    RED &#x3D; 0,    YELLOW &#x3D; 1">
-<meta property="og:type" content="article">
-<meta property="og:title" content="C&#x2F;C++基础之一">
-<meta property="og:url" content="http://example.com/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/index.html">
-<meta property="og:site_name" content="在这个娱乐至死的时代，把握好你仅有的时间和才能！">
-<meta property="og:description" content="C&#x2F;C++基础之一(数据类型、数组、指针、结构体)Talk is cheap. Show me the code. 结构体定义  123456789101112131415161718192021222324#ifndef TYPEDEFINE_H#define TYPEDEFINE_H&#x2F;&#x2F;枚举的使用typedef enum&#123;    RED &#x3D; 0,    YELLOW &#x3D; 1">
-<meta property="og:locale" content="en_US">
-<meta property="article:published_time" content="2025-08-20T06:08:37.000Z">
-<meta property="article:modified_time" content="2025-08-20T06:09:15.000Z">
-<meta property="article:author" content="Cherry">
-<meta name="twitter:card" content="summary">
-  
-    <link rel="alternate" href="/atom.xml" title="在这个娱乐至死的时代，把握好你仅有的时间和才能！" type="application/atom+xml">
-  
-  
-    <link rel="shortcut icon" href="/favicon.png">
-  
-  
-  
-<link rel="stylesheet" href="/css/style.css">
-
-  
-    
-<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
-
-  
-  
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
-
-<meta name="generator" content="Hexo 7.3.0"></head>
-
-<body>
-  <div id="container">
-    <div id="wrap">
-      <header id="header">
-  <div id="banner"></div>
-  <div id="header-outer" class="outer">
-    <div id="header-title" class="inner">
-      <h1 id="logo-wrap">
-        <a href="/" id="logo">在这个娱乐至死的时代，把握好你仅有的时间和才能！</a>
-      </h1>
-      
-        <h2 id="subtitle-wrap">
-          <a href="/" id="subtitle">人活在世上，不但有身体，还有头脑和心胸。——王小波</a>
-        </h2>
-      
-    </div>
-    <div id="header-inner" class="inner">
-      <nav id="main-nav">
-        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
-        
-          <a class="main-nav-link" href="/">Home</a>
-        
-          <a class="main-nav-link" href="/archives">Archives</a>
-        
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>C/C++基础之一 · CherryBLOG</title><meta name="description" content="用代码梳理 C/C++ 的数据类型、数组、指针与结构体，记录基础知识中的关键细节。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/"><meta property="og:type" content="article"><meta property="og:title" content="C/C++基础之一"><meta property="og:description" content="用代码梳理 C/C++ 的数据类型、数组、指针与结构体，记录基础知识中的关键细节。"><meta property="og:url" content="https://akjoson.github.io/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/"><meta property="og:site_name" content="CherryBLOG"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2025-08-20T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="CherryBLOG" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="CherryBLOG 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        Cherry<span>BLOG</span><span class="wordmark-dot">.</span>
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
       </nav>
-      <nav id="sub-nav">
-        
-        
-          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
-        
-        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
-      </nav>
-      <div id="search-form-wrap">
-        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
-      </div>
-    </div>
-  </div>
-</header>
-
-      <div class="outer">
-        <section id="main"><article id="post-C-C-基础之一" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/" class="article-date">
-  <time class="dt-published" datetime="2025-08-20T06:08:37.000Z" itemprop="datePublished">2025-08-20</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 class="p-name article-title" itemprop="headline name">
-      C/C++基础之一
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="C-C-基础之一-数据类型、数组、指针、结构体"><a href="#C-C-基础之一-数据类型、数组、指针、结构体" class="headerlink" title="C&#x2F;C++基础之一(数据类型、数组、指针、结构体)"></a>C&#x2F;C++基础之一(数据类型、数组、指针、结构体)</h3><h4 id="Talk-is-cheap-Show-me-the-code"><a href="#Talk-is-cheap-Show-me-the-code" class="headerlink" title="Talk is cheap. Show me the code."></a>Talk is cheap. Show me the code.</h4><ul>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><div class="post-breadcrumb"><a href="/">文章</a><span>/</span><a href="/categories/tech/">技术</a></div><header class="post-header"><p class="eyebrow">TECHNOLOGY</p><h1>C/C++基础之一</h1><div class="post-meta"><span>Cherry</span><time datetime="2025-08-20">2025-08-20</time><span>约 8 分钟阅读</span></div><div class="tags"><span>C/C++</span><span>基础</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-c-c-基础之一-数据类型-数组-指针-结构体">C/C++基础之一(数据类型、数组、指针、结构体)</a></li><li><a href="#section-talk-is-cheap-show-me-the-code">Talk is cheap. Show me the code.</a></li></ol></details><article class="prose"><p><a id="C-C-基础之一-数据类型、数组、指针、结构体"></a></p>
+<h3 id="section-c-c-基础之一-数据类型-数组-指针-结构体">C/C++基础之一(数据类型、数组、指针、结构体)</h3>
+<p><a id="Talk-is-cheap-Show-me-the-code"></a></p>
+<h4 id="section-talk-is-cheap-show-me-the-code">Talk is cheap. Show me the code.</h4>
+<ul>
 <li>结构体定义</li>
 </ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">ifndef</span> TYPEDEFINE_H</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> TYPEDEFINE_H</span></span><br><span class="line"><span class="comment">//枚举的使用</span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">enum</span>&#123;</span></span><br><span class="line">    RED = <span class="number">0</span>,</span><br><span class="line">    YELLOW = <span class="number">1</span>,</span><br><span class="line">    GREEN = <span class="number">2</span></span><br><span class="line">&#125;TrafficLight;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">enum</span>&#123;</span></span><br><span class="line">    START,</span><br><span class="line">    RUNNING,</span><br><span class="line">    SUSPEND,</span><br><span class="line">    STOP,</span><br><span class="line">    DESTORY</span><br><span class="line">&#125;Mission;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Student</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="type">int</span> age;</span><br><span class="line">    <span class="type">int</span> sex;</span><br><span class="line">    <span class="type">char</span> lastName[<span class="number">10</span>];</span><br><span class="line">    <span class="type">char</span> firstName[<span class="number">10</span>];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">#ifndef TYPEDEFINE_H
+#define TYPEDEFINE_H
+//枚举的使用
+typedef enum{
+    RED = 0,
+    YELLOW = 1,
+    GREEN = 2
+}TrafficLight;
+
+typedef enum{
+    START,
+    RUNNING,
+    SUSPEND,
+    STOP,
+    DESTORY
+}Mission;
+
+struct Student
+{
+    int age;
+    int sex;
+    char lastName[10];
+    char firstName[10];
+};
+</code></pre></div>
 <ul>
 <li>main函数</li>
 </ul>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="type">void</span> <span class="title function_">testDatatype</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;数据类型:\n&quot;</span>);</span><br><span class="line">  <span class="type">int</span> intValue = <span class="number">1</span>;</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;整型%d\n&quot;</span>,intValue);</span><br><span class="line">  <span class="type">char</span> charValue = <span class="string">&#x27;a&#x27;</span>;</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;char类型:%c\n&quot;</span>,charValue);</span><br><span class="line">  <span class="type">unsigned</span> <span class="type">int</span> uintValue = <span class="number">2</span>;</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;无符号整型:%d\n&quot;</span>,uintValue);</span><br><span class="line">  <span class="type">float</span> fValue = <span class="number">3.14</span>;</span><br><span class="line">  <span class="type">double</span> dValue = <span class="number">3.14</span>;</span><br><span class="line">  <span class="comment">//long 是4 byte, long long是8字节</span></span><br><span class="line">  <span class="type">long</span> <span class="type">long</span> lValue = <span class="number">123456789</span>;</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;float类型:%.2f\n&quot;</span>,fValue);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;double类型%f\n&quot;</span>,dValue);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;long类型:%ld\n&quot;</span>,lValue);</span><br><span class="line">  <span class="comment">//除此之外还有一些无符号整型的类型 ,无符号第一位不表示正负符号，只存在正数，因此比有符号的正数大一倍。</span></span><br><span class="line">  <span class="comment">//unsigned int</span></span><br><span class="line">  <span class="comment">//unsigned short</span></span><br><span class="line">  <span class="comment">//unsigned char</span></span><br><span class="line">  <span class="comment">//unsigned long</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//指针</span></span><br><span class="line"><span class="type">void</span> <span class="title function_">testPointer</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">int</span> a = <span class="number">10</span>;</span><br><span class="line">    <span class="type">int</span> *p = &amp;a;</span><br><span class="line">    <span class="type">int</span> **pp = &amp;p;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;\n&quot;</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;a value:%d\n,a address is:%p\n&quot;</span>,a,&amp;a);</span><br><span class="line">    <span class="comment">// &amp;p  p这个int指针自身的内存地址</span></span><br><span class="line">    <span class="comment">//p    p指针存放的地址值，</span></span><br><span class="line">    <span class="comment">//*p  解引用，得到p指针存放的地址值所指向的值</span></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;p memroy address is:%p,p point address is%p, p point value is:%d\n&quot;</span>,&amp;p,p,*p);</span><br><span class="line">    <span class="comment">// pp 是pp指针的值， &amp;pp是指针的内存地址， **pp是两次解引用，得到p指针所指向的值</span></span><br><span class="line">    <span class="comment">// *pp 一次解引用，得到p的值,也就是a的地址</span></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;*pp is%p, pp memroy address is:%p,pp point address value is:%p\n, pp value:%d\n&quot;</span>,*pp, &amp;pp, pp,**pp);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> s = <span class="number">1024</span>;</span><br><span class="line">    <span class="type">int</span> *sP = &amp;s;</span><br><span class="line">    <span class="comment">// 发生了隐式转换  &#x27;b&#x27; == 98</span></span><br><span class="line">    *sP = <span class="string">&#x27;b&#x27;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;s origin address:%p\n&quot;</span>,&amp;s);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;sp point address:%p\n&quot;</span>,&amp;sP);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;sP point target address:%p\n&quot;</span>,sP);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;sP point target vakye:%c\n&quot;</span>,*sP);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;point sieze:%d\n&quot;</span>,<span class="keyword">sizeof</span>(*sP));</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%d\n&quot;</span>,s);</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> arrayA[] = &#123;<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>&#125;;</span><br><span class="line">    <span class="type">int</span> *pA = arrayA;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;pA is :%d\n&quot;</span>,*(pA+<span class="number">2</span>));</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> arrayB[<span class="number">2</span>][<span class="number">3</span>] = &#123;&#123;<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>&#125;,&#123;<span class="number">4</span>,<span class="number">5</span>,<span class="number">6</span>&#125;&#125;;</span><br><span class="line">    <span class="type">int</span> (*arrayBP)[<span class="number">3</span>] = arrayB;</span><br><span class="line">    <span class="comment">//int (*p)[3] 是指针，指向“每行 3 个元素”的数组。</span></span><br><span class="line">    <span class="type">int</span> (*pC)[<span class="number">3</span>] = arrayB;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;arrayBP[0][2]%d\n&quot;</span>,arrayBP[<span class="number">0</span>][<span class="number">2</span>]);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%d\n&quot;</span>,(*(*(pC+<span class="number">1</span>)+<span class="number">2</span>)));</span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">testCalculate</span><span class="params">(<span class="type">int</span> a, <span class="type">int</span> b)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> a + b;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">void</span> <span class="title function_">testArray</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="comment">//数组测试,数组在创建的时候必须指明容量，不要越界访问</span></span><br><span class="line">  <span class="type">int</span> a[] = &#123;<span class="number">1</span>,<span class="number">3</span>,<span class="number">5</span>&#125;;</span><br><span class="line">  <span class="type">int</span> b[<span class="number">10</span>]; </span><br><span class="line">  <span class="keyword">for</span>(<span class="type">int</span> i =<span class="number">0</span>;i&lt;<span class="number">10</span>;i++)</span><br><span class="line">  &#123;</span><br><span class="line">    b[i] = i;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">// 二维数组</span></span><br><span class="line">  <span class="type">int</span> c[<span class="number">2</span>][<span class="number">3</span>] = &#123;&#123;<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>&#125;,&#123;<span class="number">4</span>,<span class="number">5</span>,<span class="number">6</span>&#125;&#125;;</span><br><span class="line"></span><br><span class="line">  <span class="type">char</span> str[] =<span class="string">&quot;hello&quot;</span>;</span><br><span class="line">  <span class="comment">// 得到的这个长度是6，多了一个\0</span></span><br><span class="line">  <span class="type">int</span> charArrayLength = <span class="keyword">sizeof</span>(str)/<span class="keyword">sizeof</span>(str[<span class="number">0</span>]);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;%d\n&quot;</span>,charArrayLength); </span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;%d\n&quot;</span>,<span class="keyword">sizeof</span>(str));</span><br><span class="line">  <span class="keyword">for</span>(<span class="type">int</span> i=<span class="number">0</span>;i&lt;charArrayLength;i++)</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%c\n&quot;</span>,str[i]);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">char</span>* <span class="title function_">reverseChars</span><span class="params">(<span class="type">char</span> *s,<span class="type">int</span> length)</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="comment">//1.当前的字符串长度,下面这个写法是错误的，因为sizeof(s) 是指针的长度，指针的长度是4 byte</span></span><br><span class="line">  <span class="comment">// int length = sizeof(s)/sizeof(s[0]);</span></span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;the length is %d&quot;</span>,length);</span><br><span class="line">  <span class="comment">//2.创建存储结果的字符串数组</span></span><br><span class="line">  <span class="type">char</span> *targetResult = (<span class="type">char</span> *)<span class="built_in">malloc</span>((length+<span class="number">1</span>) * <span class="keyword">sizeof</span>(<span class="type">char</span>));</span><br><span class="line">  <span class="keyword">if</span> (targetResult == <span class="literal">NULL</span>)</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;内存分配失败&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">//3.for倒叙循环获取字符，存入数组</span></span><br><span class="line">  <span class="keyword">for</span>(<span class="type">int</span> i=<span class="number">0</span>;i&lt;length;i++)</span><br><span class="line">  &#123;</span><br><span class="line">    targetResult[i] = s[length<span class="number">-1</span>-i];</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  targetResult[length] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">  <span class="comment">//4.返回结果</span></span><br><span class="line">  <span class="keyword">return</span> targetResult;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span></span><br><span class="line">&#123;   </span><br><span class="line">    testDatatype();</span><br><span class="line">    testPointer();</span><br><span class="line">    <span class="comment">//测试指针函数,指针函数作为一个变量可以在函数间传递，方便的进行回调，使得程序更加灵活。</span></span><br><span class="line">    <span class="type">int</span> (*pSumFunc)(<span class="type">int</span>,<span class="type">int</span>) = testCalculate;</span><br><span class="line">    <span class="type">int</span> result = pSumFunc(<span class="number">10</span>,<span class="number">20</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;Sum is:%d\n&quot;</span>,result);</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> i = <span class="number">0</span>;</span><br><span class="line">    <span class="type">int</span> count = <span class="number">10</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; count; i++)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="built_in">printf</span>(<span class="string">&quot;value is:%d \n&quot;</span>,calculateSub(i*i,i));</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">//test enum</span></span><br><span class="line">    TrafficLight currentLight = YELLOW;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;current light is:%d&quot;</span>,currentLight);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// struct Student student;</span></span><br><span class="line">    <span class="comment">// student.age = 15;</span></span><br><span class="line">    <span class="comment">// student.sex = 1;</span></span><br><span class="line">    <span class="comment">// lastName是char[10], c语言中数组不能整体赋值, 所以下面的赋值是错误的</span></span><br><span class="line">    <span class="comment">// student.lastName = &#123;&#x27;x&#x27;,&#x27;y&#x27;,&#x27;z&#x27;&#125;;</span></span><br><span class="line">    <span class="comment">// student.firstName = &#123;&#x27;a&#x27;,&#x27;b&#x27;,&#x27;c&#x27;,&#x27;d&#x27;&#125;;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">//下面是结构体的几种赋值</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">Student</span> <span class="title">student</span> =</span> &#123;<span class="number">15</span>,<span class="number">1</span>,<span class="string">&quot;y&quot;</span>,<span class="string">&quot;p&quot;</span>&#125;;</span><br><span class="line">    <span class="comment">//使用strcpy赋值</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">Student</span> <span class="title">student2</span>;</span></span><br><span class="line">    <span class="built_in">strcpy</span>(student2.firstName,<span class="string">&quot;p&quot;</span>);</span><br><span class="line">    <span class="comment">//或者如下</span></span><br><span class="line">    student2.lastName[<span class="number">0</span>] = <span class="string">&#x27;c&#x27;</span>;</span><br><span class="line">    student2.lastName[<span class="number">1</span>] = <span class="string">&#x27;h&#x27;</span>;</span><br><span class="line">    student2.lastName[<span class="number">2</span>] = <span class="string">&#x27;e&#x27;</span>; </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%s %s\n&quot;</span>,student.firstName,student.lastName);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%s %s\n&quot;</span>,student2.firstName,student2.lastName);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 字符串反转</span></span><br><span class="line">    <span class="type">char</span> *sArray = <span class="string">&quot;abcdefg&quot;</span>;</span><br><span class="line">    <span class="comment">//获取长度这里问题就来了，如果使用sizeof(s) / sizeof(s[0]); 这种获取的是包含结尾\0的</span></span><br><span class="line">    <span class="comment">//如果通过strlen(s); 那么是不包含\0的</span></span><br><span class="line">    <span class="keyword">if</span> ((sArray!=<span class="literal">NULL</span>))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">//下面计算长度这个写法是错误的</span></span><br><span class="line">        <span class="comment">//数组 → 可以用 sizeof 计算长度</span></span><br><span class="line">        <span class="comment">// 指针 → 必须用 strlen(s) 来计算字符串长度</span></span><br><span class="line">     <span class="comment">//   int sLength = sizeof(sArray)/sizeof(sArray[0]) - 1; // -1移除\0</span></span><br><span class="line">        <span class="type">int</span> sLength = <span class="built_in">strlen</span>(sArray);</span><br><span class="line">        <span class="type">char</span> *sResult = reverseChars(sArray,sLength);</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot;倒叙结果:%s\n&quot;</span>,sResult);</span><br><span class="line">        <span class="built_in">free</span>(sResult);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">
+void testDatatype()
+{
+  printf(&quot;数据类型:\n&quot;);
+  int intValue = 1;
+  printf(&quot;整型%d\n&quot;,intValue);
+  char charValue = &#39;a&#39;;
+  printf(&quot;char类型:%c\n&quot;,charValue);
+  unsigned int uintValue = 2;
+  printf(&quot;无符号整型:%d\n&quot;,uintValue);
+  float fValue = 3.14;
+  double dValue = 3.14;
+  //long 是4 byte, long long是8字节
+  long long lValue = 123456789;
+  printf(&quot;float类型:%.2f\n&quot;,fValue);
+  printf(&quot;double类型%f\n&quot;,dValue);
+  printf(&quot;long类型:%ld\n&quot;,lValue);
+  //除此之外还有一些无符号整型的类型 ,无符号第一位不表示正负符号，只存在正数，因此比有符号的正数大一倍。
+  //unsigned int
+  //unsigned short
+  //unsigned char
+  //unsigned long
+}
 
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="http://example.com/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/" data-id="cmfcay7q30001isu1e1fk6fi8" data-title="C/C++基础之一" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
+//指针
+void testPointer()
+{
+    int a = 10;
+    int *p = &amp;a;
+    int **pp = &amp;p;
+    printf(&quot;\n&quot;);
+    printf(&quot;a value:%d\n,a address is:%p\n&quot;,a,&amp;a);
+    // &amp;p  p这个int指针自身的内存地址
+    //p    p指针存放的地址值，
+    //*p  解引用，得到p指针存放的地址值所指向的值
+    printf(&quot;p memroy address is:%p,p point address is%p, p point value is:%d\n&quot;,&amp;p,p,*p);
+    // pp 是pp指针的值， &amp;pp是指针的内存地址， **pp是两次解引用，得到p指针所指向的值
+    // *pp 一次解引用，得到p的值,也就是a的地址
+    printf(&quot;*pp is%p, pp memroy address is:%p,pp point address value is:%p\n, pp value:%d\n&quot;,*pp, &amp;pp, pp,**pp);
+
+
+    int s = 1024;
+    int *sP = &amp;s;
+    // 发生了隐式转换  &#39;b&#39; == 98
+    *sP = &#39;b&#39;;
+
+    printf(&quot;s origin address:%p\n&quot;,&amp;s);
+    printf(&quot;sp point address:%p\n&quot;,&amp;sP);
+    printf(&quot;sP point target address:%p\n&quot;,sP);
+    printf(&quot;sP point target vakye:%c\n&quot;,*sP);
+    printf(&quot;point sieze:%d\n&quot;,sizeof(*sP));
+    printf(&quot;%d\n&quot;,s);
+
+    int arrayA[] = {1,2,3};
+    int *pA = arrayA;
+
+    printf(&quot;pA is :%d\n&quot;,*(pA+2));
+
+    int arrayB[2][3] = {{1,2,3},{4,5,6}};
+    int (*arrayBP)[3] = arrayB;
+    //int (*p)[3] 是指针，指向“每行 3 个元素”的数组。
+    int (*pC)[3] = arrayB;
+    printf(&quot;arrayBP[0][2]%d\n&quot;,arrayBP[0][2]);
+    printf(&quot;%d\n&quot;,(*(*(pC+1)+2)));
+
+}
+
+int testCalculate(int a, int b)
+{
+    return a + b;
+}
+
+void testArray()
+{
+  //数组测试,数组在创建的时候必须指明容量，不要越界访问
+  int a[] = {1,3,5};
+  int b[10]; 
+  for(int i =0;i&lt;10;i++)
+  {
+    b[i] = i;
+  }
+  // 二维数组
+  int c[2][3] = {{1,2,3},{4,5,6}};
+
+  char str[] =&quot;hello&quot;;
+  // 得到的这个长度是6，多了一个\0
+  int charArrayLength = sizeof(str)/sizeof(str[0]);
+  printf(&quot;%d\n&quot;,charArrayLength); 
+  printf(&quot;%d\n&quot;,sizeof(str));
+  for(int i=0;i&lt;charArrayLength;i++)
+  {
+    printf(&quot;%c\n&quot;,str[i]);
+  }
+}
+
+char* reverseChars(char *s,int length)
+{
+  //1.当前的字符串长度,下面这个写法是错误的，因为sizeof(s) 是指针的长度，指针的长度是4 byte
+  // int length = sizeof(s)/sizeof(s[0]);
+  printf(&quot;the length is %d&quot;,length);
+  //2.创建存储结果的字符串数组
+  char *targetResult = (char *)malloc((length+1) * sizeof(char));
+  if (targetResult == NULL)
+  {
+    printf(&quot;内存分配失败&quot;);
+    return NULL;
+  }
+  //3.for倒叙循环获取字符，存入数组
+  for(int i=0;i&lt;length;i++)
+  {
+    targetResult[i] = s[length-1-i];
+  }
+
+  targetResult[length] = &#39;\0&#39;;
+  //4.返回结果
+  return targetResult;
+}
+
+int main()
+{   
+    testDatatype();
+    testPointer();
+    //测试指针函数,指针函数作为一个变量可以在函数间传递，方便的进行回调，使得程序更加灵活。
+    int (*pSumFunc)(int,int) = testCalculate;
+    int result = pSumFunc(10,20);
+    printf(&quot;Sum is:%d\n&quot;,result);
+
+    int i = 0;
+    int count = 10;
+
+    for (i = 0; i &lt; count; i++)
+    {
+      printf(&quot;value is:%d \n&quot;,calculateSub(i*i,i));
+    }
     
-<nav id="article-nav">
-  
-    <a href="/2025/08/21/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%BA%8C/" id="article-nav-newer" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">Newer</strong>
-      <div class="article-nav-title">
-        
-          C/C++基础之二(类的构造函数)
-        
-      </div>
-    </a>
-  
-  
-    <a href="/2025/03/24/20250324/" id="article-nav-older" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">Older</strong>
-      <div class="article-nav-title">Android源码阅读之———广播的注册与分发</div>
-    </a>
-  
-</nav>
+    //test enum
+    TrafficLight currentLight = YELLOW;
+    printf(&quot;current light is:%d&quot;,currentLight);
 
-  
-</article>
+    // struct Student student;
+    // student.age = 15;
+    // student.sex = 1;
+    // lastName是char[10], c语言中数组不能整体赋值, 所以下面的赋值是错误的
+    // student.lastName = {&#39;x&#39;,&#39;y&#39;,&#39;z&#39;};
+    // student.firstName = {&#39;a&#39;,&#39;b&#39;,&#39;c&#39;,&#39;d&#39;};
 
+    //下面是结构体的几种赋值
+    struct Student student = {15,1,&quot;y&quot;,&quot;p&quot;};
+    //使用strcpy赋值
+    struct Student student2;
+    strcpy(student2.firstName,&quot;p&quot;);
+    //或者如下
+    student2.lastName[0] = &#39;c&#39;;
+    student2.lastName[1] = &#39;h&#39;;
+    student2.lastName[2] = &#39;e&#39;; 
+    printf(&quot;%s %s\n&quot;,student.firstName,student.lastName);
+    printf(&quot;%s %s\n&quot;,student2.firstName,student2.lastName);
 
-</section>
-        
-          <aside id="sidebar">
-  
-    
-
-  
-    
-
-  
-    
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Archives</h3>
-    <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/12/">December 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/09/">September 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/08/">August 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">March 2025</a></li></ul>
-    </div>
-  </div>
-
-
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Recent Posts</h3>
-    <div class="widget">
-      <ul>
-        
-          <li>
-            <a href="/2025/12/10/%E5%A6%82%E4%BD%95%E7%A7%BB%E9%99%A4jar%E5%8C%85%E7%AD%BE%E5%90%8D/">如何移除jar包签名</a>
-          </li>
-        
-          <li>
-            <a href="/2025/09/30/Flutter-apk-build-success-build-tool-couldn-t-find-it/">Flutter apk build success, build tool couldn&#39;t find it</a>
-          </li>
-        
-          <li>
-            <a href="/2025/09/09/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%89-%E6%8C%87%E9%92%88%E5%BC%95%E8%B5%B7%E7%9A%84%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2/">C/C++基础之三(指针引起的内存泄露)</a>
-          </li>
-        
-          <li>
-            <a href="/2025/08/21/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%BA%8C/">C/C++基础之二(类的构造函数)</a>
-          </li>
-        
-          <li>
-            <a href="/2025/08/20/C-C-%E5%9F%BA%E7%A1%80%E4%B9%8B%E4%B8%80/">C/C++基础之一</a>
-          </li>
-        
-      </ul>
-    </div>
-  </div>
-
-  
-</aside>
-        
-      </div>
-      <footer id="footer">
-  
-  <div class="outer">
-    <div id="footer-info" class="inner">
-      
-      &copy; 2025 Cherry<br>
-      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
-    </div>
-  </div>
-</footer>
-
-    </div>
-    <nav id="mobile-nav">
-  
-    <a href="/" class="mobile-nav-link">Home</a>
-  
-    <a href="/archives" class="mobile-nav-link">Archives</a>
-  
-</nav>
-    
-
-
-<script src="/js/jquery-3.6.4.min.js"></script>
-
-
-
-  
-<script src="/fancybox/jquery.fancybox.min.js"></script>
-
-
-
-
-<script src="/js/script.js"></script>
-
-
-
-
-
-  </div>
-</body>
-</html>
+    // 字符串反转
+    char *sArray = &quot;abcdefg&quot;;
+    //获取长度这里问题就来了，如果使用sizeof(s) / sizeof(s[0]); 这种获取的是包含结尾\0的
+    //如果通过strlen(s); 那么是不包含\0的
+    if ((sArray!=NULL))
+    {
+        //下面计算长度这个写法是错误的
+        //数组 → 可以用 sizeof 计算长度
+        // 指针 → 必须用 strlen(s) 来计算字符串长度
+     //   int sLength = sizeof(sArray)/sizeof(sArray[0]) - 1; // -1移除\0
+        int sLength = strlen(sArray);
+        char *sResult = reverseChars(sArray,sLength);
+        printf(&quot;倒叙结果:%s\n&quot;,sResult);
+        free(sResult);
+    }
+    return 0;
+}
+</code></pre></div>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>感谢你读到这里。</p><a class="text-link" href="/categories/tech/">继续阅读技术 <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2025/03/24/20250324/"><small>上一篇</small><strong>Android源码阅读之———广播的注册与分发</strong></a><a href="/2025/08/21/C-C-基础之二/"><small>下一篇</small><strong>C/C++基础之二(类的构造函数)</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-3"><a href="#section-c-c-基础之一-数据类型-数组-指针-结构体" title="C/C++基础之一(数据类型、数组、指针、结构体)">C/C++基础之一(数据类型、数组、指针、结构体)</a></li><li class="toc-level-4"><a href="#section-talk-is-cheap-show-me-the-code" title="Talk is cheap. Show me the code.">Talk is cheap. Show me the code.</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> CherryBLOG · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>
