@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 02：消息封装 · 殷仔的博客</title><meta name="description" content="拆解 Parcel 序列化、binder_transaction_data、binder_write_read、对象引用翻译和 BC/BR 命令，理解一次事务的字节布局。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 02：消息封装"><meta property="og:description" content="拆解 Parcel 序列化、binder_transaction_data、binder_write_read、对象引用翻译和 BC/BR 命令，理解一次事务的字节布局。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 02：消息封装</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 30 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-1-一次-ioctl-携带两个方向的数据">1. 一次 ioctl 携带两个方向的数据</a></li><li><a href="#section-2-命令流-bc-命令的编码格式">2. 命令流：BC_ 命令的编码格式</a></li><li><a href="#section-写入命令的代码">写入命令的代码</a></li><li><a href="#section-3-binder-transaction-data-逐字段">3. binder_transaction_data 逐字段</a></li><li><a href="#section-字段说明表">字段说明表</a></li><li><a href="#section-flags-的取值-enum-transaction-flags">flags 的取值（enum transaction_flags）</a></li><li><a href="#section-4-parcel-负载是怎么序列化的">4. Parcel：负载是怎么序列化的</a></li><li><a href="#section-4-1-parcel-是什么">4.1 Parcel 是什么</a></li><li><a href="#section-4-2-基本编码规则">4.2 基本编码规则</a></li><li><a href="#section-4-3-一个例子-echo-hi-产生的字节">4.3 一个例子：echo(&quot;hi&quot;) 产生的字节</a></li><li><a href="#section-4-4-读取侧的对称性">4.4 读取侧的对称性</a></li><li><a href="#section-5-offsets-数组与-flat-binder-object-跨进程传对象">5. offsets 数组与 flat_binder_object：跨进程传对象</a></li><li><a href="#section-5-1-问题-binder-对象不能按值拷贝">5.1 问题：Binder 对象不能按值拷贝</a></li><li><a href="#section-5-2-flat-binder-object-结构">5.2 flat_binder_object 结构</a></li><li><a href="#section-5-3-type-的取值">5.3 type 的取值</a></li><li><a href="#section-5-4-翻译过程-binder-translate-binder-binder-translate-handle">5.4 翻译过程（binder_translate_binder / binder_translate_handle）</a></li><li><a href="#section-5-5-parcel-侧的代码">5.5 Parcel 侧的代码</a></li><li><a href="#section-6-安全上下文-binder-transaction-data-secctx">6. 安全上下文：binder_transaction_data_secctx</a></li><li><a href="#section-7-命令全表-bc-和-br">7. 命令全表：BC_ 和 BR_</a></li><li><a href="#section-7-1-用户态-内核-bc-binder-command">7.1 用户态 → 内核（BC_ = Binder Command）</a></li><li><a href="#section-7-2-内核-用户态-br-binder-return">7.2 内核 → 用户态（BR_ = BindeR Return）</a></li><li><a href="#section-7-3-生命周期示意">7.3 生命周期示意</a></li><li><a href="#section-8-ioctl-命令一览">8. ioctl 命令一览</a></li><li><a href="#section-9-一次事务在内核缓冲区里的完整样貌">9. 一次事务在内核缓冲区里的完整样貌</a></li><li><a href="#section-10-小结-封装的三层">10. 小结：封装的三层</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<p>这一章回答一个问题：<strong><code>remoteService.echo(&quot;hi&quot;)</code> 里的那个 <code>&quot;hi&quot;</code>，从 Java 对象到内核，中间被拆成了哪些数据结构？</strong></p>
+<p>答案是三层套娃：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">binder_write_read          ← 一次 ioctl 的「信封」，同时携带「要写的」和「要读的」
+  └─ 命令流 write_buffer
+       ├─ BC_TRANSACTION   ← 4 字节命令字
+       └─ binder_transaction_data   ← 事务的「元数据」：目标句柄、code、大小、指针
+            └─ data.ptr.buffer      ← 指向「负载缓冲区」
+                 └─ Parcel 序列化后的字节
+                     └─ flat_binder_object（如果里面有 Binder 对象）
+</code></pre></div>
+<hr>
+<h2 id="section-1-一次-ioctl-携带两个方向的数据">1. 一次 ioctl 携带两个方向的数据</h2>
+<p>用户态和内核之间<strong>只有一条通道</strong>：<code>ioctl(fd, BINDER_WRITE_READ, &amp;bwr)</code>。</p>
+<p><code>binder_write_read</code> 结构同时描述了「我要写给内核的东西」和「我要从内核读的东西」：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">/* include/uapi/linux/android/binder.h */
+struct binder_write_read {
+	binder_size_t   write_size;      /* 输入：write_buffer 有多少字节 */
+	binder_size_t   write_consumed;  /* 输出：内核实际消费了多少字节 */
+	binder_uintptr_t write_buffer;   /* 输入：命令流起始地址（用户态虚拟地址） */
+	binder_size_t   read_size;       /* 输入：read_buffer 有多大 */
+	binder_size_t   read_consumed;   /* 输出：内核实际写了多少字节 */
+	binder_uintptr_t read_buffer;    /* 输入：返回流缓冲区地址 */
+};
+/* binder_size_t = __u64, binder_uintptr_t = __u64 */
+</code></pre></div>
+<p><strong>关键理解</strong>：</p>
+<ul>
+<li><code>write_buffer</code> 里装的是<strong>命令流</strong>（<code>BC_*</code>），是「我请求内核做的事」。</li>
+<li><code>read_buffer</code> 里装的是<strong>返回流</strong>（<code>BR_*</code>），是「内核要告诉我或让我做的事」。</li>
+<li><strong>一次 <code>ioctl</code> 可能既写又读</strong>，这是 Binder 驱动精心设计的：调用方把请求塞进 <code>write_buffer</code>，同时准备好一个空 <code>read_buffer</code>，内核处理完请求后，顺便把「有没有活给我干」也一并返回。</li>
+</ul>
+<p>在 <code>libbinder</code> 里，这两个缓冲区就是 <code>IPCThreadState</code> 的两个成员 <code>mOut</code> 和 <code>mIn</code>（都是 <code>Parcel</code>）：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/IPCThreadState.cpp
+status_t IPCThreadState::talkWithDriver(bool doReceive)
+{
+    binder_write_read bwr;
+    // ...
+    bwr.write_size     = mOut.dataSize();
+    bwr.write_consumed = 0;
+    bwr.write_buffer   = (binder_uintptr_t)mOut.data();
+
+    bwr.read_size     = needRead ? mIn.dataCapacity() : 0;
+    bwr.read_consumed = 0;
+    bwr.read_buffer   = (binder_uintptr_t)mIn.data();
+
+    if (ioctl(mProcess-&gt;mDriverFD, BINDER_WRITE_READ, &amp;bwr) &gt;= 0)
+        err = NO_ERROR;
+    // ...
+    if (bwr.write_consumed &gt; 0) {
+        if (bwr.write_consumed &lt; mOut.dataSize())
+            mOut.remove(0, bwr.write_consumed);   // 部分消费，保留剩余
+        else
+            mOut.setDataSize(0);                  // 全部消费完
+    }
+    if (bwr.read_consumed &gt; 0) {
+        mIn.setDataSize(bwr.read_consumed);
+        mIn.setDataPosition(0);
+    }
+    return err;
+}
+</code></pre></div>
+<blockquote>
+<p><strong>注意</strong>：<code>mOut</code> / <code>mIn</code> 就是普通 <code>Parcel</code>。所以「命令流」和「负载」用的是同一套序列化机制。</p>
+</blockquote>
+<hr>
+<h2 id="section-2-命令流-bc-命令的编码格式">2. 命令流：BC_ 命令的编码格式</h2>
+<p>命令流里是<strong>一串</strong> <code>[4 字节命令字][变长参数]</code> 的重复：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">/* 4 字节命令 + 参数 */
+</code></pre></div>
+<p>以一次同步调用为例，<code>mOut</code> 里的内容是：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">┌────────────────────────────────────────────────────────────┐
+│ uint32_t  BC_TRANSACTION                    (4 字节)       │
+├────────────────────────────────────────────────────────────┤
+│ struct binder_transaction_data tr           (40 字节 / 64位)│
+└────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><code>BC_TRANSACTION</code> 的值是 <code>_IOW('c', 0, struct binder_transaction_data)</code>。</p>
+<h3 id="section-写入命令的代码">写入命令的代码</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/IPCThreadState.cpp
+status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
+        int32_t handle, uint32_t code, const Parcel&amp; data, status_t* statusBuffer)
+{
+    binder_transaction_data tr;
+
+    tr.target.ptr   = 0;
+    tr.target.handle = (uint32_t)handle;   // ← 目标句柄
+    tr.code         = code;                // ← 方法号（AIDL 里的 TRANSACTION_xxx）
+    tr.flags        = binderFlags;         // ← 0 或 TF_ONE_WAY
+
+    const status_t err = data.errorCheck();
+    tr.data_size    = data.dataSize();
+    tr.data.ptr.buffer  = (binder_uintptr_t)data.data();          // ← 负载缓冲区用户态地址
+    tr.offsets_size = data.objectsSize();
+    tr.data.ptr.offsets = (binder_uintptr_t)data.objects();       // ← offsets 数组用户态地址
+
+    if (err != NO_ERROR) {
+        if (statusBuffer) { ... }
+        tr.flags |= TF_STATUS_CODE;
+    }
+
+    // 把「命令字」和「tr」依次写进 mOut
+    mOut.writeInt32(cmd);
+    mOut.write(&amp;tr, sizeof(tr));
+
+    return NO_ERROR;
+}
+</code></pre></div>
+<p>注意两个容易忽略的点：</p>
+<ol>
+<li><strong><code>tr.data.ptr.buffer</code> 和 <code>data.data()</code> 只是把用户态指针填进去</strong>，数据本身还在原 <code>Parcel</code> 里。真正的拷贝发生在内核里（见 <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a>）。</li>
+<li><strong><code>tr.target.ptr = 0</code> 是必须显式写的</strong>（AOSP 源码注释原话是 &quot;Don't pass uninitialized stack data to a remote process&quot;）。<code>target</code> 是 union：发送方只填 <code>handle</code>；<code>ptr</code> 和 <code>cookie</code> 会被<strong>内核</strong>在给接收方构造 <code>BR_TRANSACTION</code> 时改写成 <code>node-&gt;ptr</code> / <code>node-&gt;cookie</code>。</li>
+</ol>
+<hr>
+<h2 id="section-3-binder-transaction-data-逐字段">3. <code>binder_transaction_data</code> 逐字段</h2>
+<p>这是 Binder 最重要的结构体，<strong>整个 RPC 的元数据都在这里</strong>：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_transaction_data {
+	/* 目标对象：发送 BC_TRANSACTION 时用 handle，发送 BC_REPLY 时用 ptr */
+	union {
+		__u32           handle;   /* 目标对象的句柄（客户端场景） */
+		binder_uintptr_t ptr;     /* 目标对象的内核地址（服务端回复场景） */
+	} target;
+
+	binder_uintptr_t cookie;      /* BBinder 的地址，仅 BC_REPLY 时由内核填充 */
+	__u32            code;        /* 方法号 / transaction code */
+	__u32            flags;       /* TF_* 标志位，如 TF_ONE_WAY */
+
+	pid_t            sender_pid;  /* 发送方的 pid（内核填充） */
+	uid_t            sender_euid; /* 发送方的 uid（内核填充） */
+
+	binder_size_t    data_size;   /* 负载字节数 */
+	binder_size_t    offsets_size;/* offsets 数组的字节数 */
+
+	/* 数据描述：既可以是指针（跨进程），也可以是内联缓冲（同进程优化） */
+	union {
+		struct {
+			binder_uintptr_t buffer;   /* 负载缓冲区地址 */
+			binder_uintptr_t offsets;  /* offsets 数组地址 */
+		} ptr;
+		__u8 buf[8];
+	} data;
+};
+</code></pre></div>
+<h3 id="section-字段说明表">字段说明表</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>字段</th>
+<th>谁填</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>target.handle</code></td>
+<td>Client</td>
+<td>目标 Binder 对象的句柄。<strong>这是 Client 唯一知道的「地址」</strong></td>
+</tr>
+<tr>
+<td><code>target.ptr</code></td>
+<td><strong>内核</strong></td>
+<td>与 <code>target.handle</code> 共用同一块内存（union）。发送方填 <code>handle</code>；<strong>内核给接收方构造 <code>BR_TRANSACTION</code> 时改填 <code>node-&gt;ptr</code></strong>（<code>BBinder</code> 的 weakref 地址）。若目标是 ServiceManager（哑节点）则填 0</td>
+</tr>
+<tr>
+<td><code>cookie</code></td>
+<td><strong>内核</strong></td>
+<td>同上，由内核填成 <code>node-&gt;cookie</code>（<code>BBinder</code> 对象地址）。接收方用它还原出 <code>BBinder*</code>。发送方发出时一律为 0</td>
+</tr>
+<tr>
+<td><code>code</code></td>
+<td>Client</td>
+<td>方法号。AIDL 里是 <code>TRANSACTION_xxx = FIRST_CALL_TRANSACTION + n</code></td>
+</tr>
+<tr>
+<td><code>flags</code></td>
+<td>Client</td>
+<td><code>TF_ONE_WAY</code> / <code>TF_ACCEPT_FDS</code> / <code>TF_STATUS_CODE</code> 等</td>
+</tr>
+<tr>
+<td><code>sender_pid</code> / <code>sender_euid</code></td>
+<td><strong>内核</strong></td>
+<td>内核<strong>强制填充</strong>为真实值，客户端无法伪造 —— 这是 Binder 权限模型的基础</td>
+</tr>
+<tr>
+<td><code>data_size</code> / <code>offsets_size</code></td>
+<td>Client</td>
+<td>负载大小 / offsets 数组大小</td>
+</tr>
+<tr>
+<td><code>data.ptr.buffer</code> / <code>data.ptr.offsets</code></td>
+<td>Client</td>
+<td>负载和 offsets 的用户态地址</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-flags-的取值-enum-transaction-flags"><code>flags</code> 的取值（<code>enum transaction_flags</code>）</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">enum transaction_flags {
+	TF_ONE_WAY     = 0x01,  /* 异步单向调用，不等待回复 */
+	TF_ROOT_OBJECT = 0x04,  /* 内容是 root object（基本不用） */
+	TF_STATUS_CODE = 0x08,  /* 负载内容是 status_t 错误码，不是正常数据 */
+	TF_ACCEPT_FDS  = 0x10,  /* 允许接收方通过 reply 返回 fd */
+	TF_CLEAR_BUF   = 0x20,  /* 事务完成后清零 buffer */
+	TF_UPDATE_TXN  = 0x40,  /* 内核用于更新已有异步事务的优先级 */
+};
+</code></pre></div>
+<hr>
+<h2 id="section-4-parcel-负载是怎么序列化的">4. <code>Parcel</code>：负载是怎么序列化的</h2>
+<h3 id="section-4-1-parcel-是什么">4.1 Parcel 是什么</h3>
+<p><code>Parcel</code> 是 Binder 的<strong>数据快递盒</strong>：一块连续内存 + 一个写位置游标。所有参数按顺序写进去，接收方按同样的顺序读出来。</p>
+<ul>
+<li>Java <code>android.os.Parcel</code> 和 native <code>Parcel</code>（<code>frameworks/native/libs/binder/Parcel.cpp</code>）<strong>是同一份数据的两个视角</strong>：Java <code>Parcel</code> 内部通过 JNI 持有一个 native <code>Parcel</code>。</li>
+<li>它是<strong>线性、小端、4 字节对齐</strong>的。</li>
+</ul>
+<h3 id="section-4-2-基本编码规则">4.2 基本编码规则</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>类型</th>
+<th>编码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code> / <code>uint32</code></td>
+<td>4 字节，小端</td>
+</tr>
+<tr>
+<td><code>long</code> / <code>uint64</code></td>
+<td>8 字节，小端（<strong>对齐到 4 字节，不是 8</strong>）</td>
+</tr>
+<tr>
+<td><code>float</code></td>
+<td>4 字节 IEEE754</td>
+</tr>
+<tr>
+<td><code>double</code></td>
+<td>8 字节 IEEE754</td>
+</tr>
+<tr>
+<td><code>boolean</code></td>
+<td>4 字节，0 或 1</td>
+</tr>
+<tr>
+<td><code>String16</code></td>
+<td>4 字节<strong>字符个数</strong>（不是字节数）+ UTF-16LE 字符 + 2 字节 <code>\0\0</code> 结尾</td>
+</tr>
+<tr>
+<td><code>String8</code>（<code>writeString8</code>）</td>
+<td>4 字节字节数（含结尾 0）+ UTF-8 + <code>\0</code></td>
+</tr>
+<tr>
+<td><code>byte[]</code> / 任意数组</td>
+<td>4 字节长度 + 元素序列</td>
+</tr>
+<tr>
+<td><code>IBinder</code></td>
+<td>24 字节 <code>flat_binder_object</code>（64 位下）</td>
+</tr>
+<tr>
+<td><code>FileDescriptor</code></td>
+<td>4 字节 <code>flat_binder_object</code>（<code>BINDER_TYPE_FD</code>）</td>
+</tr>
+<tr>
+<td><code>Parcelable</code></td>
+<td>4 字节非空标志 + 调用 <code>writeToParcel()</code> 写的内容</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p>⚠️ <strong><code>String</code> 用的是 UTF-16</strong>，这是 Binder 传输中文/emoji 时「大小估算」容易出错的原因：一个中文字符 = 2 字节，一个 emoji = 4 字节（代理对）。</p>
+</blockquote>
+<h3 id="section-4-3-一个例子-echo-hi-产生的字节">4.3 一个例子：<code>echo(&quot;hi&quot;)</code> 产生的字节</h3>
+<p><code>Proxy</code> 里执行：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">_data.writeInterfaceToken(&quot;com.example.IMyService&quot;);  // 1) 写接口标识
+_data.writeString(&quot;hi&quot;);                              // 2) 写参数
+</code></pre></div>
+<p><code>Parcel</code> 里的实际内容（大端展示地址，实际小端存储）：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">偏移 0:  0x00000010        ← String16 长度 = 16 个字符 (8 个 UTF-16 字符)
+偏移 4:  &#39;c&#39; &#39;o&#39; &#39;m&#39; ...
+         &quot;com.example.IMyService\0\0&quot;（32 字节）
+偏移 36: 0x00000002        ← &quot;hi&quot; 的长度 = 2 个字符
+偏移 40: &#39;h&#39;,&#39;i&#39;           ← 2 个 UTF-16LE 字符 = 4 字节
+偏移 44: 0x0000 0000       ← 结尾的 NUL
+</code></pre></div>
+<blockquote>
+<p><code>writeInterfaceToken</code> 写的是一个固定格式的 <code>String16</code>：<strong>先写 DESCRIPTOR 字符串，再写字符串长度</strong>（注意顺序和普通 <code>writeString</code> 相反，<code>readInterfaceToken</code> 也是反着读的）。这是 <code>Parcel::writeInterfaceToken</code> 的特殊实现，目的是在流里插一个「魔数」，防止接口不匹配。</p>
+</blockquote>
+<h3 id="section-4-4-读取侧的对称性">4.4 读取侧的对称性</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// Stub.onTransact
+data.enforceInterface(&quot;com.example.IMyService&quot;);  // 校验 DESCRIPTOR，不对就抛异常
+String _arg0 = data.readString();                 // 按同样格式读回 &quot;hi&quot;
+</code></pre></div>
+<p><code>enforceInterface</code> 是<strong>必须的</strong>：它保证了「调用方调用的接口 == 服务端实现的接口」。如果 AIDL 接口改过而客户端没重新编译，这里会抛 <code>SecurityException</code>。</p>
+<hr>
+<h2 id="section-5-offsets-数组与-flat-binder-object-跨进程传对象">5. <code>offsets</code> 数组与 <code>flat_binder_object</code>：跨进程传对象</h2>
+<h3 id="section-5-1-问题-binder-对象不能按值拷贝">5.1 问题：Binder 对象不能按值拷贝</h3>
+<p>如果 <code>Parcel</code> 里包含一个 Binder 对象（另一个服务），<strong>不能</strong>把它的内存地址直接写进负载 —— 因为地址只在原进程有效。</p>
+<p>正确做法：负载里放一个<strong>占位结构</strong>，同时用 <strong><code>offsets</code> 数组</strong>记录它在负载中的偏移，内核读到这个偏移后，<strong>把它翻译成对端进程能用的东西</strong>。</p>
+<p><img src="/images/binder/02-1.png" alt="5.1 问题：Binder 对象不能按值拷贝（图 1）"></p>
+<h3 id="section-5-2-flat-binder-object-结构">5.2 <code>flat_binder_object</code> 结构</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct flat_binder_object {
+	__u32            type;    /* 见下表 */
+	__u32            flags;   /* 例如 FLAT_BINDER_FLAG_ACCEPTS_FDS */
+	union {
+		binder_uintptr_t binder;  /* 本地对象：BBinder 在当前进程的用户态地址 */
+		__u32            handle;  /* 远程对象：句柄 */
+	};
+	binder_uintptr_t cookie;      /* BBinder 的 cookie（JavaBBinderHolder* 等） */
+};
+</code></pre></div>
+<p>64 位下大小 = 4 + 4 + 8 + 8 = <strong>24 字节</strong>（需要 8 字节对齐，所以 <code>Parcel</code> 会对齐填充）。</p>
+<h3 id="section-5-3-type-的取值">5.3 <code>type</code> 的取值</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">#define B_PACK_CHARS(c1, c2, c3, c4) \
+	((((c1)&lt;&lt;24)) | (((c2)&lt;&lt;16)) | (((c3)&lt;&lt;8)) | (c4))
+#define B_TYPE_LARGE 0x85
+
+enum {
+	BINDER_TYPE_BINDER      = B_PACK_CHARS(&#39;s&#39;, &#39;b&#39;, &#39;*&#39;, B_TYPE_LARGE), /* 本地强引用对象 */
+	BINDER_TYPE_WEAK_BINDER = B_PACK_CHARS(&#39;w&#39;, &#39;b&#39;, &#39;*&#39;, B_TYPE_LARGE), /* 本地弱引用对象 */
+	BINDER_TYPE_HANDLE      = B_PACK_CHARS(&#39;s&#39;, &#39;h&#39;, &#39;*&#39;, B_TYPE_LARGE), /* 远程强引用句柄 */
+	BINDER_TYPE_WEAK_HANDLE = B_PACK_CHARS(&#39;w&#39;, &#39;h&#39;, &#39;*&#39;, B_TYPE_LARGE), /* 远程弱引用句柄 */
+	BINDER_TYPE_FD          = B_PACK_CHARS(&#39;f&#39;, &#39;d&#39;, &#39;*&#39;, B_TYPE_LARGE), /* 文件描述符 */
+	BINDER_TYPE_FDA         = B_PACK_CHARS(&#39;f&#39;, &#39;d&#39;, &#39;a&#39;, B_TYPE_LARGE), /* fd 数组 */
+	BINDER_TYPE_PTR         = B_PACK_CHARS(&#39;p&#39;, &#39;t&#39;, &#39;*&#39;, B_TYPE_LARGE), /* scatter-gather 内存块 */
+};
+</code></pre></div>
+<p><strong>发送方和接收方看到的 <code>type</code> 是不一样的</strong>，这是理解 Binder 的关键：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>发送方写进 Parcel</th>
+<th>内核翻译后（接收方读到）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>传自己的对象给对端</td>
+<td><code>BINDER_TYPE_BINDER</code>（带 <code>binder</code> 地址 + <code>cookie</code>）</td>
+<td><code>BINDER_TYPE_HANDLE</code>（带 <code>handle</code>）</td>
+</tr>
+<tr>
+<td>把别人的句柄转发给对端</td>
+<td><code>BINDER_TYPE_HANDLE</code>（带 <code>handle</code>）</td>
+<td><code>BINDER_TYPE_HANDLE</code>（可能是新 <code>handle</code>）</td>
+</tr>
+<tr>
+<td>传自己的弱引用</td>
+<td><code>BINDER_TYPE_WEAK_BINDER</code></td>
+<td><code>BINDER_TYPE_WEAK_HANDLE</code></td>
+</tr>
+<tr>
+<td>传文件描述符</td>
+<td><code>BINDER_TYPE_FD</code>（带 fd 号）</td>
+<td><code>BINDER_TYPE_FD</code>（带对端进程里新安装的 fd 号）</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-5-4-翻译过程-binder-translate-binder-binder-translate-handle">5.4 翻译过程（<code>binder_translate_binder</code> / <code>binder_translate_handle</code>）</h3>
+<p>以「A 把自己的对象传给 B」为例：</p>
+<p><img src="/images/binder/02-2.png" alt="5.4 翻译过程（binder_translate_binder / binder_translate_handle）（图 2）"></p>
+<p>内核做的三件事：</p>
+<ol>
+<li><strong>为发送方的对象建 <code>binder_node</code></strong>（如果还没有）—— 所以「第一次传对象」会顺带创建 node。</li>
+<li><strong>为目标进程建 <code>binder_ref</code></strong>（如果还没有）—— <code>ref-&gt;desc</code> 就是目标进程看到的 handle。</li>
+<li><strong>就地改写</strong>负载里的 <code>flat_binder_object</code>。</li>
+</ol>
+<blockquote>
+<p>这也解释了为什么「同一个服务被传给同一个进程两次，拿到的是同一个 handle」—— 第二次会命中已有的 <code>binder_ref</code>。</p>
+</blockquote>
+<h3 id="section-5-5-parcel-侧的代码">5.5 <code>Parcel</code> 侧的代码</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/Parcel.cpp
+status_t Parcel::writeStrongBinder(const sp&lt;IBinder&gt;&amp; val)
+{
+    return flattenBinder(val);
+}
+
+status_t Parcel::flattenBinder(const sp&lt;IBinder&gt;&amp; binder)
+{
+    // ...
+    if (binder == nullptr) {
+        flat_binder_object obj{};
+        obj.type = BINDER_TYPE_BINDER;
+        // 空 binder
+        return finishFlattenBinder(binder, obj);
+    }
+
+    // 情况 1：本地对象（BBinder）→ 写 BINDER_TYPE_BINDER，带地址和 cookie
+    BBinder *local = binder-&gt;localBinder();
+    if (local != nullptr) {
+        flat_binder_object obj{};
+        obj.flags = ...;
+        obj.type = BINDER_TYPE_BINDER;
+        obj.binder = reinterpret_cast&lt;uintptr_t&gt;(local-&gt;getWeakRefs());
+        obj.cookie = reinterpret_cast&lt;uintptr_t&gt;(local);
+        return finishFlattenBinder(binder, obj);
+    }
+
+    // 情况 2：远程代理（BpBinder）→ 写 BINDER_TYPE_HANDLE，带 handle
+    BpBinder *proxy = binder-&gt;remoteBinder();
+    const int32_t handle = proxy ? proxy-&gt;handle() : 0;
+    flat_binder_object obj{};
+    obj.flags = ...;
+    obj.type = BINDER_TYPE_HANDLE;
+    obj.binder = 0;
+    obj.handle = handle;
+    return finishFlattenBinder(binder, obj);
+}
+</code></pre></div>
+<p><code>finishFlattenBinder</code> 负责：<strong>把 <code>flat_binder_object</code> 的偏移追加到 offsets 数组</strong>，然后把这些字节写进负载。</p>
+<hr>
+<h2 id="section-6-安全上下文-binder-transaction-data-secctx">6. 安全上下文：<code>binder_transaction_data_secctx</code></h2>
+<p>Android 10（Q）引入。原来服务端要知道「调用方是谁的 SELinux 上下文」，得去读 <code>/proc/&lt;pid&gt;/attr/current</code>，这有 TOCTOU 竞态（读的瞬间进程可能已经 exec 了别的程序）。</p>
+<p>Android 10 起，内核在创建 <code>binder_proc</code> 时缓存一次 secctx，随事务一起下发：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_transaction_data_secctx {
+	struct binder_transaction_data transaction_data;  /* 就是上面那个结构 */
+	binder_uintptr_t               secctx;            /* 指向&quot;进程名:类型:类别&quot;字符串 */
+};
+</code></pre></div>
+<p>对应用户态的新命令 <code>BR_TRANSACTION_SEC_CTX</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// IPCThreadState::executeCommand()
+case BR_TRANSACTION_SEC_CTX:
+case BR_TRANSACTION:
+{
+    binder_transaction_data_secctx tr_secctx;
+    binder_transaction_data&amp; tr = tr_secctx.transaction_data;
+
+    if (cmd == (int) BR_TRANSACTION_SEC_CTX) {
+        result = mIn.read(&amp;tr_secctx, sizeof(tr_secctx));   // 带 secctx
+    } else {
+        result = mIn.read(&amp;tr, sizeof(tr));                 // 老格式，无 secctx
+        tr_secctx.secctx = 0;
+    }
+    // ...
+}
+</code></pre></div>
+<hr>
+<h2 id="section-7-命令全表-bc-和-br">7. 命令全表：BC_ 和 BR_</h2>
+<p>这些是用户态和内核之间的「指令集」，定义在 <code>include/uapi/linux/android/binder.h</code>。</p>
+<h3 id="section-7-1-用户态-内核-bc-binder-command">7.1 用户态 → 内核（BC_ = Binder Command）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>命令</th>
+<th>参数</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BC_TRANSACTION</code></td>
+<td><code>binder_transaction_data</code></td>
+<td>发起一次调用</td>
+</tr>
+<tr>
+<td><code>BC_REPLY</code></td>
+<td><code>binder_transaction_data</code></td>
+<td>回复一次调用</td>
+</tr>
+<tr>
+<td><code>BC_FREE_BUFFER</code></td>
+<td><code>binder_uintptr_t</code></td>
+<td>告诉内核「这个事务缓冲区我用完了，可以回收」</td>
+</tr>
+<tr>
+<td><code>BC_ENTER_LOOPER</code></td>
+<td>—</td>
+<td>本线程作为 Binder 主循环线程（不退出）</td>
+</tr>
+<tr>
+<td><code>BC_EXIT_LOOPER</code></td>
+<td>—</td>
+<td>用完就退出主循环</td>
+</tr>
+<tr>
+<td><code>BC_REGISTER_LOOPER</code></td>
+<td>—</td>
+<td>注册为 Binder 线程池成员（线程由 <code>BR_SPAWN_LOOPER</code> 催生）</td>
+</tr>
+<tr>
+<td><code>BC_INCREFS</code></td>
+<td><code>uint32_t handle</code></td>
+<td>对该 handle 增加<strong>弱引用</strong></td>
+</tr>
+<tr>
+<td><code>BC_ACQUIRE</code></td>
+<td><code>uint32_t handle</code></td>
+<td>对该 handle 增加<strong>强引用</strong></td>
+</tr>
+<tr>
+<td><code>BC_RELEASE</code></td>
+<td><code>uint32_t handle</code></td>
+<td>强引用减一</td>
+</tr>
+<tr>
+<td><code>BC_DECREFS</code></td>
+<td><code>uint32_t handle</code></td>
+<td>弱引用减一</td>
+</tr>
+<tr>
+<td><code>BC_REQUEST_DEATH_NOTIFICATION</code></td>
+<td><code>binder_uintptr_t handle, binder_uintptr_t cookie</code></td>
+<td>注册死亡通知</td>
+</tr>
+<tr>
+<td><code>BC_CLEAR_DEATH_NOTIFICATION</code></td>
+<td><code>binder_uintptr_t handle, binder_uintptr_t cookie</code></td>
+<td>注销死亡通知</td>
+</tr>
+<tr>
+<td><code>BC_DEAD_BINDER_DONE</code></td>
+<td><code>binder_uintptr_t</code></td>
+<td>处理完死亡通知</td>
+</tr>
+<tr>
+<td><code>BC_ATTEMPT_ACQUIRE</code></td>
+<td>—</td>
+<td>已废弃（旧版弱引用升级强引用）</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-7-2-内核-用户态-br-binder-return">7.2 内核 → 用户态（BR_ = BindeR Return）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>命令</th>
+<th>参数</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BR_ERROR</code></td>
+<td><code>int32_t</code></td>
+<td>出错</td>
+</tr>
+<tr>
+<td><code>BR_OK</code></td>
+<td>—</td>
+<td>成功</td>
+</tr>
+<tr>
+<td><code>BR_TRANSACTION</code></td>
+<td><code>binder_transaction_data</code></td>
+<td><strong>有调用来了，去执行</strong></td>
+</tr>
+<tr>
+<td><code>BR_TRANSACTION_SEC_CTX</code></td>
+<td><code>binder_transaction_data_secctx</code></td>
+<td>同上，附带 SELinux 上下文（Android 10+）</td>
+</tr>
+<tr>
+<td><code>BR_REPLY</code></td>
+<td><code>binder_transaction_data</code></td>
+<td><strong>你之前发起的调用有结果了</strong></td>
+</tr>
+<tr>
+<td><code>BR_TRANSACTION_COMPLETE</code></td>
+<td>—</td>
+<td>你提交的事务已被内核接收（不代表对方已处理）</td>
+</tr>
+<tr>
+<td><code>BR_SPAWN_LOOPER</code></td>
+<td>—</td>
+<td>让用户态<strong>新建一个 Binder 线程</strong></td>
+</tr>
+<tr>
+<td><code>BR_NOOP</code></td>
+<td>—</td>
+<td>空操作（内核内部用）</td>
+</tr>
+<tr>
+<td><code>BR_DEAD_REPLY</code></td>
+<td>—</td>
+<td>对方进程已死，回复无法送达</td>
+</tr>
+<tr>
+<td><code>BR_FAILED_REPLY</code></td>
+<td>—</td>
+<td>事务处理失败</td>
+</tr>
+<tr>
+<td><code>BR_INCREFS</code></td>
+<td><code>handle, cookie</code></td>
+<td>内核要求<strong>对象拥有者</strong>建立弱引用</td>
+</tr>
+<tr>
+<td><code>BR_ACQUIRE</code></td>
+<td><code>handle, cookie</code></td>
+<td>内核要求对象拥有者建立强引用</td>
+</tr>
+<tr>
+<td><code>BR_RELEASE</code></td>
+<td><code>handle, cookie</code></td>
+<td>内核通知对象拥有者：可以释放强引用了</td>
+</tr>
+<tr>
+<td><code>BR_DECREFS</code></td>
+<td><code>handle, cookie</code></td>
+<td>内核通知对象拥有者：可以释放弱引用了</td>
+</tr>
+<tr>
+<td><code>BR_DEAD_BINDER</code></td>
+<td><code>binder_uintptr_t cookie</code></td>
+<td><strong>你关注的对象死了</strong></td>
+</tr>
+<tr>
+<td><code>BR_CLEAR_DEATH_NOTIFICATION_DONE</code></td>
+<td><code>binder_uintptr_t cookie</code></td>
+<td>注销死亡通知完成</td>
+</tr>
+<tr>
+<td><code>BR_ATTEMPT_ACQUIRE</code></td>
+<td>—</td>
+<td>已废弃</td>
+</tr>
+<tr>
+<td><code>BR_FINISHED</code></td>
+<td>—</td>
+<td>已废弃</td>
+</tr>
+<tr>
+<td><code>BR_DEAD_BINDER</code> / <code>BR_DEAD_REPLY</code></td>
+<td>见上</td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-7-3-生命周期示意">7.3 生命周期示意</h3>
+<p><img src="/images/binder/02-3.png" alt="7.3 生命周期示意（图 3）"></p>
+<hr>
+<h2 id="section-8-ioctl-命令一览">8. ioctl 命令一览</h2>
+<p>除了最重要的 <code>BINDER_WRITE_READ</code>，驱动还提供这些 ioctl：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>ioctl</th>
+<th>作用</th>
+<th>谁用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BINDER_WRITE_READ</code></td>
+<td>读写命令流/返回流（<strong>唯一的数据通道</strong>）</td>
+<td>所有进程</td>
+</tr>
+<tr>
+<td><code>BINDER_SET_MAX_THREADS</code></td>
+<td>设置本进程 Binder 线程池上限</td>
+<td><code>ProcessState</code> 构造时</td>
+</tr>
+<tr>
+<td><code>BINDER_SET_CONTEXT_MGR</code></td>
+<td>注册自己为 ServiceManager（<strong>只能调用一次</strong>）</td>
+<td><code>servicemanager</code></td>
+</tr>
+<tr>
+<td><code>BINDER_SET_CONTEXT_MGR_EXT</code></td>
+<td>同上，可指定 secctx</td>
+<td>Android 12+</td>
+</tr>
+<tr>
+<td><code>BINDER_THREAD_EXIT</code></td>
+<td>线程退出时通知内核</td>
+<td><code>IPCThreadState</code> 析构</td>
+</tr>
+<tr>
+<td><code>BINDER_VERSION</code></td>
+<td>查询驱动协议版本</td>
+<td><code>ProcessState</code> 构造时</td>
+</tr>
+<tr>
+<td><code>BINDER_ENABLE_ONEWAY_SPOOFING</code></td>
+<td>允许发送带伪造 pid 的 oneway 事务</td>
+<td>某些系统服务</td>
+</tr>
+<tr>
+<td><code>BINDER_GET_NODE_DEBUG_INFO</code> / <code>BINDER_GET_NODE_INFO_FOR_REF</code></td>
+<td>调试信息</td>
+<td>debugfs / dumpsys</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-9-一次事务在内核缓冲区里的完整样貌">9. 一次事务在内核缓冲区里的完整样貌</h2>
+<p>把前面所有东西拼起来。发送方 <code>mOut</code> 里的字节（假设负载中只有一个 <code>String &quot;hi&quot;</code>）：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">偏移   内容                                        说明
+────   ────────────────────────────────────────   ──────────────────────────
+0x00   04 00 00 00  ...                            BC_TRANSACTION (0x40046301)
+0x04   ┌─ binder_transaction_data ─────────────┐
+       │ target.handle = 42  (与 ptr 是 union) │   目标句柄
+       │ target.ptr    = 0  (发送方不填)       │   内核会把它换成 node-&gt;ptr
+       │ cookie        = 0  (发送方不填)       │   内核会把它换成 node-&gt;cookie
+       │ code          = 1  (TRANSACTION_echo) │   方法号
+       │ flags         = 0                     │   同步
+       │ sender_pid    = 0    ← 内核填充       │
+       │ sender_euid   = 0    ← 内核填充       │
+       │ data_size     = 48                    │
+       │ offsets_size  = 0                     │
+       │ data.ptr.buffer  = 0x7f0012340000  ───┼─→ 指向下面的负载
+       │ data.ptr.offsets = 0x000000000000     │   没有 offsets（无 Binder 对象）
+       └───────────────────────────────────────┘
+0x2C   ... mOut 结束
+
+─── data.ptr.buffer 指向的负载缓冲区 ───
+0x00   10 00 00 00 ...  &quot;com.example.IMyService\0\0&quot;   writeInterfaceToken
+0x24   02 00 00 00                                     String 长度 = 2
+0x28   &#39;h&#39; 00 &#39;i&#39; 00                                  UTF-16LE &quot;hi&quot;
+0x2C   00 00 00 00                                     NUL 结尾
+</code></pre></div>
+<p>内核处理时：</p>
+<ol>
+<li><code>binder_transaction_data</code> 被<strong>按值拷到内核栈</strong>（<code>binder_ioctl_write_read</code> 里 <code>copy_from_user</code>）。</li>
+<li><code>data.ptr.buffer</code> 指向的<strong>负载</strong>被拷到<strong>目标进程</strong>的 binder 缓冲区（一次拷贝，见第 4 章）。</li>
+<li><code>flat_binder_object</code>（如果有）被就地翻译成 handle。</li>
+</ol>
+<hr>
+<h2 id="section-10-小结-封装的三层">10. 小结：封装的三层</h2>
+<p><img src="/images/binder/02-4.png" alt="10. 小结：封装的三层（图 4）"></p>
+<ul>
+<li><strong>语义层 → 序列化层</strong>：AIDL 生成的 <code>Proxy</code> 用 <code>Parcel</code> 把参数写成字节。</li>
+<li><strong>序列化层 → 事务层</strong>：<code>writeTransactionData</code> 把 <code>Parcel</code> 的地址和大小塞进 <code>binder_transaction_data</code>，加上 <code>code</code> 和 <code>handle</code>。</li>
+<li><strong>事务层 → 传输层</strong>：<code>talkWithDriver</code> 把 <code>BC_TRANSACTION</code> 和 <code>binder_transaction_data</code> 拼进 <code>mOut</code>，通过 <code>BINDER_WRITE_READ</code> 交给内核。</li>
+</ul>
+<hr>
+<p>下一章：<a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/"><code>03-RPC原理.md</code></a> —— 句柄和代理模式是怎么让「远程调用」看起来像「本地调用」的。</p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/03-rpc原理/"><small>上一篇</small><strong>Android Binder 03：RPC 原理</strong></a><a href="/2026/11/11/01-架构总览/"><small>下一篇</small><strong>Android Binder 01：架构总览</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-1-一次-ioctl-携带两个方向的数据" title="1. 一次 ioctl 携带两个方向的数据">1. 一次 ioctl 携带两个方向的数据</a></li><li class="toc-level-2"><a href="#section-2-命令流-bc-命令的编码格式" title="2. 命令流：BC_ 命令的编码格式">2. 命令流：BC_ 命令的编码格式</a></li><li class="toc-level-3"><a href="#section-写入命令的代码" title="写入命令的代码">写入命令的代码</a></li><li class="toc-level-2"><a href="#section-3-binder-transaction-data-逐字段" title="3. binder_transaction_data 逐字段">3. binder_transaction_data 逐字段</a></li><li class="toc-level-3"><a href="#section-字段说明表" title="字段说明表">字段说明表</a></li><li class="toc-level-3"><a href="#section-flags-的取值-enum-transaction-flags" title="flags 的取值（enum transaction_flags）">flags 的取值（enum transaction_flags）</a></li><li class="toc-level-2"><a href="#section-4-parcel-负载是怎么序列化的" title="4. Parcel：负载是怎么序列化的">4. Parcel：负载是怎么序列化的</a></li><li class="toc-level-3"><a href="#section-4-1-parcel-是什么" title="4.1 Parcel 是什么">4.1 Parcel 是什么</a></li><li class="toc-level-3"><a href="#section-4-2-基本编码规则" title="4.2 基本编码规则">4.2 基本编码规则</a></li><li class="toc-level-3"><a href="#section-4-3-一个例子-echo-hi-产生的字节" title="4.3 一个例子：echo(&quot;hi&quot;) 产生的字节">4.3 一个例子：echo(&quot;hi&quot;) 产生的字节</a></li><li class="toc-level-3"><a href="#section-4-4-读取侧的对称性" title="4.4 读取侧的对称性">4.4 读取侧的对称性</a></li><li class="toc-level-2"><a href="#section-5-offsets-数组与-flat-binder-object-跨进程传对象" title="5. offsets 数组与 flat_binder_object：跨进程传对象">5. offsets 数组与 flat_binder_object：跨进程传对象</a></li><li class="toc-level-3"><a href="#section-5-1-问题-binder-对象不能按值拷贝" title="5.1 问题：Binder 对象不能按值拷贝">5.1 问题：Binder 对象不能按值拷贝</a></li><li class="toc-level-3"><a href="#section-5-2-flat-binder-object-结构" title="5.2 flat_binder_object 结构">5.2 flat_binder_object 结构</a></li><li class="toc-level-3"><a href="#section-5-3-type-的取值" title="5.3 type 的取值">5.3 type 的取值</a></li><li class="toc-level-3"><a href="#section-5-4-翻译过程-binder-translate-binder-binder-translate-handle" title="5.4 翻译过程（binder_translate_binder / binder_translate_handle）">5.4 翻译过程（binder_translate_binder / binder_translate_handle）</a></li><li class="toc-level-3"><a href="#section-5-5-parcel-侧的代码" title="5.5 Parcel 侧的代码">5.5 Parcel 侧的代码</a></li><li class="toc-level-2"><a href="#section-6-安全上下文-binder-transaction-data-secctx" title="6. 安全上下文：binder_transaction_data_secctx">6. 安全上下文：binder_transaction_data_secctx</a></li><li class="toc-level-2"><a href="#section-7-命令全表-bc-和-br" title="7. 命令全表：BC_ 和 BR_">7. 命令全表：BC_ 和 BR_</a></li><li class="toc-level-3"><a href="#section-7-1-用户态-内核-bc-binder-command" title="7.1 用户态 → 内核（BC_ = Binder Command）">7.1 用户态 → 内核（BC_ = Binder Command）</a></li><li class="toc-level-3"><a href="#section-7-2-内核-用户态-br-binder-return" title="7.2 内核 → 用户态（BR_ = BindeR Return）">7.2 内核 → 用户态（BR_ = BindeR Return）</a></li><li class="toc-level-3"><a href="#section-7-3-生命周期示意" title="7.3 生命周期示意">7.3 生命周期示意</a></li><li class="toc-level-2"><a href="#section-8-ioctl-命令一览" title="8. ioctl 命令一览">8. ioctl 命令一览</a></li><li class="toc-level-2"><a href="#section-9-一次事务在内核缓冲区里的完整样貌" title="9. 一次事务在内核缓冲区里的完整样貌">9. 一次事务在内核缓冲区里的完整样貌</a></li><li class="toc-level-2"><a href="#section-10-小结-封装的三层" title="10. 小结：封装的三层">10. 小结：封装的三层</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

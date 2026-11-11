@@ -1,0 +1,19 @@
+%% 消息封装的三层套娃
+flowchart LR
+    subgraph L1["第 1 层: 语义层"]
+        A["方法调用<br/>echo('hi')"]
+    end
+    subgraph L2["第 2 层: 序列化层 (Parcel)"]
+        B["字节流 + offsets 数组<br/>writeInterfaceToken / writeString"]
+    end
+    subgraph L3["第 3 层: 事务层 (binder_transaction_data)"]
+        C["code + handle + flags<br/>+ 指向负载的指针"]
+    end
+    subgraph L4["第 4 层: 传输层 (ioctl + 驱动)"]
+        D["binder_write_read<br/>BC_TRANSACTION ... BR_REPLY"]
+    end
+    A --> B --> C --> D
+
+    style L2 fill:#e2f7d8
+    style L3 fill:#d8ecff
+    style L4 fill:#ffe9c7

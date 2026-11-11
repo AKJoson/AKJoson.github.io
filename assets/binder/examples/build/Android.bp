@@ -1,0 +1,79 @@
+// examples/build/Android.bp
+//
+// Soong 构建脚本示例（AOSP 环境）。
+// 关键点：
+//   - aidl 接口只需要在 srcs 里写 .aidl 文件，Soong 会自动调用 aidl 编译器
+//   - aidl 会同时为 Java / C++ / NDK 后端生成代码（取决于模块类型）
+
+// ───────────────────────────────────────────────────────────────────────────
+// 1) AIDL 接口库（同时给 Java 和 C++ 用）
+// ───────────────────────────────────────────────────────────────────────────
+aidl_interface {
+    name: "com.example.binderdemo",
+    srcs: ["com/example/binderdemo/*.aidl"],
+    unstable: true,
+    backend: {
+        java: {
+            enabled: true,
+            sdk_version: "system_current",
+            min_sdk_version: "30",
+        },
+        cpp: {
+            enabled: true,
+        },
+        ndk: {
+            enabled: true,
+        },
+    },
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 2) 服务端（Java）
+// ───────────────────────────────────────────────────────────────────────────
+android_app {
+    name: "BinderDemoServer",
+    srcs: [
+        "src/com/example/binderdemo/**/*.java",
+    ],
+    static_libs: [
+        "com.example.binderdemo-V1-java",
+    ],
+    sdk_version: "system_current",
+    platform_apis: true,
+    certificate: "platform",
+    privileged: true,
+    manifest: "AndroidManifest.xml",
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 3) 服务端（C++）
+// ───────────────────────────────────────────────────────────────────────────
+cc_binary {
+    name: "binder_demo_native",
+    srcs: [
+        "native/*.cpp",
+    ],
+    static_libs: [
+        "com.example.binderdemo-V1-cpp",
+        "libbinder",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libutils",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 4) VINTF / 权限声明（如果是 vendor/HAL 场景）
+// ───────────────────────────────────────────────────────────────────────────
+// 如果服务要跨分区（system ↔ vendor）访问，接口需要 @VintfStability：
+//
+//   @VintfStability
+//   interface IMyService { ... }
+//
+// 并在 Android.bp 里加 stability: "vintf"

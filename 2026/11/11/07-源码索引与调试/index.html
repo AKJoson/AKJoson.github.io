@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 07：源码索引与调试 · 殷仔的博客</title><meta name="description" content="整理 AOSP 源码路径、关键函数、debugfs、dumpsys 和 Perfetto 调试方式，附学习路径与自测题。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 07：源码索引与调试"><meta property="og:description" content="整理 AOSP 源码路径、关键函数、debugfs、dumpsys 和 Perfetto 调试方式，附学习路径与自测题。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 07：源码索引与调试</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 26 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-1-aosp-源码路径总表">1. AOSP 源码路径总表</a></li><li><a href="#section-1-1-java-框架层">1.1 Java 框架层</a></li><li><a href="#section-1-2-jni-胶水层">1.2 JNI 胶水层</a></li><li><a href="#section-1-3-native-库层-libbinder">1.3 Native 库层（libbinder）</a></li><li><a href="#section-1-4-servicemanager-进程">1.4 ServiceManager 进程</a></li><li><a href="#section-1-5-内核驱动">1.5 内核驱动</a></li><li><a href="#section-2-关键函数索引-按调用顺序">2. 关键函数索引（按调用顺序）</a></li><li><a href="#section-client-侧-发送">Client 侧（发送）</a></li><li><a href="#section-内核侧">内核侧</a></li><li><a href="#section-server-侧-接收">Server 侧（接收）</a></li><li><a href="#section-3-关键结构体索引">3. 关键结构体索引</a></li><li><a href="#section-4-调试手段">4. 调试手段</a></li><li><a href="#section-4-1-debugfs-需要-root">4.1 debugfs（需要 root）</a></li><li><a href="#section-4-2-dumpsys">4.2 dumpsys</a></li><li><a href="#section-4-3-binder-事务追踪-perfetto-ftrace">4.3 Binder 事务追踪（Perfetto / ftrace）</a></li><li><a href="#section-4-4-systrace-atrace">4.4 systrace / atrace</a></li><li><a href="#section-4-5-logcat-相关标签">4.5 logcat 相关标签</a></li><li><a href="#section-4-6-strace-看实际的-ioctl">4.6 strace：看实际的 ioctl</a></li><li><a href="#section-4-7-java-侧快速自测">4.7 Java 侧快速自测</a></li><li><a href="#section-5-版本演进时间线">5. 版本演进时间线</a></li><li><a href="#section-6-推荐的阅读路径">6. 推荐的阅读路径</a></li><li><a href="#section-路径-a-先建立整体认知-1-2-天">路径 A：先建立整体认知（1~2 天）</a></li><li><a href="#section-路径-b-深入内核-3-5-天">路径 B：深入内核（3~5 天）</a></li><li><a href="#section-路径-c-动手实践">路径 C：动手实践</a></li><li><a href="#section-7-自测题-检验是否真的理清">7. 自测题（检验是否真的理清）</a></li><li><a href="#section-基础">基础</a></li><li><a href="#section-封装">封装</a></li><li><a href="#section-内核">内核</a></li><li><a href="#section-进阶">进阶</a></li><li><a href="#section-参考答案位置">参考答案位置</a></li><li><a href="#section-8-延伸资料">8. 延伸资料</a></li><li><a href="#section-9-一句话总结">9. 一句话总结</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<hr>
+<h2 id="section-1-aosp-源码路径总表">1. AOSP 源码路径总表</h2>
+<blockquote>
+<p>路径基于 AOSP <code>main</code> 分支。用 <a href="https://cs.android.com">cs.android.com</a> 搜索最快。</p>
+</blockquote>
+<h3 id="section-1-1-java-框架层">1.1 Java 框架层</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>frameworks/base/core/java/android/os/IBinder.java</code></td>
+<td><code>IBinder</code> 接口、<code>DeathRecipient</code>、<code>FLAG_ONEWAY</code>、保留 code</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/Binder.java</code></td>
+<td>本地 Binder，<code>transact()</code>（本地直通）、<code>execTransact()</code>、<code>onTransact()</code>、<code>attachInterface()</code>、<code>getCallingUid/Pid/Sid()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/BinderProxy.java</code></td>
+<td>远程代理，<code>transact()</code>（native）、<code>linkToDeath()</code>、<code>queryLocalInterface()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/Parcel.java</code></td>
+<td><code>Parcel</code>（JNI 桥）</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/IInterface.java</code></td>
+<td><code>asBinder()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/ServiceManager.java</code></td>
+<td>名字服务入口</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/ServiceManagerNative.java</code></td>
+<td><code>getService</code>/<code>addService</code> 的实现</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/BinderInternal.java</code></td>
+<td>隐藏 API：<code>getContextObject</code>、<code>joinThreadPool</code> 等</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/RemoteException.java</code> 等</td>
+<td>异常类</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/TransactionTooLargeException.java</code></td>
+<td>大小超限异常（自 Android 7 从 <code>RemoteException</code> 拆分）</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-1-2-jni-胶水层">1.2 JNI 胶水层</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>frameworks/base/core/jni/android_util_Binder.cpp</code></td>
+<td><strong>核心</strong>：<code>JavaBBinder</code>、<code>JavaDeathRecipient</code>、<code>javaObjectForIBinder()</code>、<code>ibinderForJavaObject()</code>、<code>signalExceptionForError()</code>、<code>gBinderOffsets</code> 等偏移表</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/jni/android_os_Parcel.cpp</code></td>
+<td>Java <code>Parcel</code> ↔ native <code>Parcel</code></td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/jni/android_os_MessageQueue.cpp</code></td>
+<td>Looper 与 Binder 的交互</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-1-3-native-库层-libbinder">1.3 Native 库层（<code>libbinder</code>）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>frameworks/native/libs/binder/IPCThreadState.cpp</code></td>
+<td><strong>核心</strong>：<code>transact()</code>、<code>talkWithDriver()</code>、<code>executeCommand()</code>、<code>waitForResponse()</code>、<code>joinThreadPool()</code>、<code>sendReply()</code>、<code>writeTransactionData()</code>、<code>freeBuffer()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/ProcessState.cpp</code></td>
+<td><strong>核心</strong>：单例、<code>mmap</code>、<code>startThreadPool()</code>、<code>spawnPooledThread()</code>、<code>getContextObject()</code>、<code>becomeContextManager()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/BpBinder.cpp</code></td>
+<td>远程代理、<code>linkToDeath</code>、<code>sendObituary</code>、引用计数命令</td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/BBinder.cpp</code></td>
+<td>本地实体、<code>transact()</code> → <code>onTransact()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/Parcel.cpp</code></td>
+<td><strong>核心</strong>：序列化、<code>flat_binder_object</code>、<code>ipcSetDataReference()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/IInterface.cpp</code></td>
+<td><code>asInterface</code> 骨架</td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/include/binder/IInterface.h</code></td>
+<td><code>BpInterface</code> / <code>BnInterface</code> 模板</td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/include/binder/IBinder.h</code></td>
+<td><code>IBinder</code>、<code>DeathRecipient</code>、<code>BpRefBase</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/IServiceManager.cpp</code></td>
+<td><code>ServiceManager</code> 的 native 客户端</td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/Status.cpp</code></td>
+<td><code>Status</code> / <code>ExceptionCode</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/libs/binder/ProcessState.h</code></td>
+<td><code>BINDER_VM_SIZE</code>、<code>DEFAULT_MAX_BINDER_THREADS</code> 等宏</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-1-4-servicemanager-进程">1.4 ServiceManager 进程</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>frameworks/native/cmds/servicemanager/main.cpp</code></td>
+<td>进程入口，<code>becomeContextManager()</code></td>
+</tr>
+<tr>
+<td><code>frameworks/native/cmds/servicemanager/ServiceManager.cpp</code></td>
+<td><code>addService</code> / <code>getService</code> / <code>listServices</code> 实现</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-1-5-内核驱动">1.5 内核驱动</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>drivers/android/binder.c</code></td>
+<td><strong>核心</strong>：<code>binder_ioctl</code>、<code>binder_thread_write</code>、<code>binder_thread_read</code>、<code>binder_transaction</code>、<code>binder_proc_transaction</code>、<code>binder_translate_*</code></td>
+</tr>
+<tr>
+<td><code>drivers/android/binder_alloc.c</code></td>
+<td>缓冲区分配器：<code>binder_alloc_new_buf</code>、<code>binder_alloc_copy_user_to_buffer</code>、<code>binder_alloc_free_buf</code></td>
+</tr>
+<tr>
+<td><code>drivers/android/binder_alloc.h</code></td>
+<td><code>binder_buffer</code> / <code>binder_alloc</code> 结构</td>
+</tr>
+<tr>
+<td><code>drivers/android/binder_internal.h</code></td>
+<td><code>binder_proc</code> / <code>binder_thread</code> / <code>binder_node</code> / <code>binder_ref</code> / <code>binder_transaction</code> 结构</td>
+</tr>
+<tr>
+<td><code>drivers/android/binderfs.c</code></td>
+<td>binderfs 文件系统（Android 10+）</td>
+</tr>
+<tr>
+<td><code>include/uapi/linux/android/binder.h</code></td>
+<td><strong>协议头</strong>：<code>BC_*</code> / <code>BR_*</code> / <code>flat_binder_object</code> / <code>binder_transaction_data</code> / ioctl 定义</td>
+</tr>
+<tr>
+<td><code>include/uapi/linux/android/binderfs.h</code></td>
+<td>binderfs 的 ioctl</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>注意</strong>：驱动源码在 AOSP 的 <code>kernel/common</code> / <code>kernel/msm</code> 等内核仓库里，不在 <code>frameworks</code> 里。Google 的 common kernel 仓库：<code>https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/drivers/android/binder.c</code></p>
+</blockquote>
+<hr>
+<h2 id="section-2-关键函数索引-按调用顺序">2. 关键函数索引（按调用顺序）</h2>
+<p>一次同步 RPC 会经过这些函数，<strong>从上到下读一遍就能把链路走通</strong>：</p>
+<h3 id="section-client-侧-发送">Client 侧（发送）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>函数</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>IMyService.Stub.Proxy.xxx()</code></td>
+<td>生成的 AIDL</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>Parcel.writeInterfaceToken()</code> / <code>writeString()</code></td>
+<td><code>Parcel.java</code> → <code>android_os_Parcel.cpp</code> → <code>Parcel.cpp</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>BinderProxy.transact()</code></td>
+<td><code>BinderProxy.java</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>android_os_BinderProxy_transact()</code></td>
+<td><code>android_util_Binder.cpp</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>BpBinder::transact()</code></td>
+<td><code>BpBinder.cpp</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>IPCThreadState::transact()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>IPCThreadState::writeTransactionData()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>IPCThreadState::waitForResponse()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>IPCThreadState::talkWithDriver()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-内核侧">内核侧</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>函数</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10</td>
+<td><code>binder_ioctl()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>binder_ioctl_write_read()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>binder_get_thread()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>binder_thread_write()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>binder_transaction()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>15</td>
+<td><code>binder_alloc_new_buf()</code></td>
+<td><code>binder_alloc.c</code></td>
+</tr>
+<tr>
+<td>16</td>
+<td><code>binder_alloc_copy_user_to_buffer()</code></td>
+<td><code>binder_alloc.c</code></td>
+</tr>
+<tr>
+<td>17</td>
+<td><code>binder_translate_binder()</code> / <code>_handle()</code> / <code>_fd()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>18</td>
+<td><code>binder_proc_transaction()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>19</td>
+<td><code>binder_enqueue_thread_work()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+<tr>
+<td>20</td>
+<td><code>wake_up_interruptible_sync()</code></td>
+<td>内核</td>
+</tr>
+<tr>
+<td>21</td>
+<td><code>binder_thread_read()</code></td>
+<td><code>binder.c</code></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-server-侧-接收">Server 侧（接收）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>函数</th>
+<th>文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>22</td>
+<td><code>IPCThreadState::joinThreadPool()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>23</td>
+<td><code>IPCThreadState::getAndExecuteCommand()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>24</td>
+<td><code>IPCThreadState::talkWithDriver()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>25</td>
+<td><code>IPCThreadState::executeCommand()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+<tr>
+<td>26</td>
+<td><code>Parcel::ipcSetDataReference()</code></td>
+<td><code>Parcel.cpp</code></td>
+</tr>
+<tr>
+<td>27</td>
+<td><code>BBinder::transact()</code></td>
+<td><code>BBinder.cpp</code></td>
+</tr>
+<tr>
+<td>28</td>
+<td><code>JavaBBinder::onTransact()</code></td>
+<td><code>android_util_Binder.cpp</code></td>
+</tr>
+<tr>
+<td>29</td>
+<td><code>Binder.execTransact()</code> / <code>execTransactInternal()</code></td>
+<td><code>Binder.java</code></td>
+</tr>
+<tr>
+<td>30</td>
+<td><code>IMyService.Stub.onTransact()</code></td>
+<td>生成的 AIDL</td>
+</tr>
+<tr>
+<td>31</td>
+<td><code>IPCThreadState::sendReply()</code></td>
+<td><code>IPCThreadState.cpp</code></td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-3-关键结构体索引">3. 关键结构体索引</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>结构体</th>
+<th>文件</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>binder_write_read</code></td>
+<td><code>uapi/.../binder.h</code></td>
+<td>ioctl 的信封</td>
+</tr>
+<tr>
+<td><code>binder_transaction_data</code></td>
+<td><code>uapi/.../binder.h</code></td>
+<td>事务元数据</td>
+</tr>
+<tr>
+<td><code>binder_transaction_data_secctx</code></td>
+<td><code>uapi/.../binder.h</code></td>
+<td>带 SELinux 上下文</td>
+</tr>
+<tr>
+<td><code>flat_binder_object</code></td>
+<td><code>uapi/.../binder.h</code></td>
+<td>Parcel 里的 Binder 对象/句柄/fd</td>
+</tr>
+<tr>
+<td><code>binder_proc</code></td>
+<td><code>binder_internal.h</code></td>
+<td>进程状态</td>
+</tr>
+<tr>
+<td><code>binder_thread</code></td>
+<td><code>binder_internal.h</code></td>
+<td>线程状态</td>
+</tr>
+<tr>
+<td><code>binder_node</code></td>
+<td><code>binder_internal.h</code></td>
+<td>服务端对象</td>
+</tr>
+<tr>
+<td><code>binder_ref</code></td>
+<td><code>binder_internal.h</code></td>
+<td>客户端引用</td>
+</tr>
+<tr>
+<td><code>binder_ref_death</code></td>
+<td><code>binder_internal.h</code></td>
+<td>死亡通知</td>
+</tr>
+<tr>
+<td><code>binder_transaction</code></td>
+<td><code>binder_internal.h</code></td>
+<td>一次事务</td>
+</tr>
+<tr>
+<td><code>binder_buffer</code></td>
+<td><code>binder_alloc.h</code></td>
+<td>缓冲区</td>
+</tr>
+<tr>
+<td><code>binder_alloc</code></td>
+<td><code>binder_alloc.h</code></td>
+<td>分配器</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-4-调试手段">4. 调试手段</h2>
+<h3 id="section-4-1-debugfs-需要-root">4.1 debugfs（需要 root）</h3>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># 挂载 debugfs
+mount -t debugfs none /sys/kernel/debug      # 通常已自动挂载
+
+# 所有 binder 进程
+cat /sys/kernel/debug/binder/proc
+
+# 某个进程的详细状态（线程、node、ref、buffer、事务）
+cat /sys/kernel/debug/binder/proc/12345
+
+# 全局统计（各类事务数量、失败次数）
+cat /sys/kernel/debug/binder/stats
+
+# 所有进行中的事务
+cat /sys/kernel/debug/binder/transactions
+
+# 所有死进程
+cat /sys/kernel/debug/binder/dead_procs
+
+# 事务日志（需要先开启）
+echo 1 &gt; /sys/kernel/debug/binder/proc/12345/transaction_log
+cat /sys/kernel/debug/binder/proc/12345/transaction_log
+</code></pre></div>
+<p><strong><code>/sys/kernel/debug/binder/proc/&lt;pid&gt;</code> 输出的解读</strong>：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">binder proc state:                      ← 某个进程
+proc 1234
+thread 1234: l 12 need_return 0 tr 0     ← 线程 pid=1234, looper 状态 0x12, 事务栈深度 0
+  incoming transaction 12345: 5678 from 9999   ← 正在处理的事务
+  buffer 12346: 5678 from 9999                 ← 占用的缓冲区
+node 12347: u0000007f00a000 c0000007f00b000 hs 1 hw 1 ls 0 lw 0 is 1 iw 1
+                                             ← node: 用户地址, cookie, 各种引用计数
+  ref 12348: desc 42 s 1 w 1 death 0000...   ← 引用: 句柄 42, 强 1 弱 1
+</code></pre></div>
+<p>字段对照：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>u&lt;addr&gt;</code></td>
+<td><code>node-&gt;ptr</code>（BBinder 用户态地址）</td>
+</tr>
+<tr>
+<td><code>c&lt;addr&gt;</code></td>
+<td><code>node-&gt;cookie</code></td>
+</tr>
+<tr>
+<td><code>hs</code> / <code>hw</code></td>
+<td><code>has_strong_ref</code> / <code>has_weak_ref</code>（拥有者是否建立了引用）</td>
+</tr>
+<tr>
+<td><code>ls</code> / <code>lw</code></td>
+<td><code>local_strong_refs</code> / <code>local_weak_refs</code></td>
+</tr>
+<tr>
+<td><code>is</code> / <code>iw</code></td>
+<td><code>internal_strong_refs</code> / 内部弱引用</td>
+</tr>
+<tr>
+<td><code>ref ... desc N s X w Y</code></td>
+<td>句柄 N，强引用 X，弱引用 Y</td>
+</tr>
+<tr>
+<td><code>tr</code></td>
+<td>事务栈深度</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-4-2-dumpsys">4.2 dumpsys</h3>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># 查看某个进程持有的 binder 对象（需要权限）
+dumpsys activity processes | grep -A5 Binder
+
+# 查看 Binder 统计
+dumpsys binder?
+
+# 查看各进程的 binder 调用统计（Android 10+）
+dumpsys binder_calls_stats
+# 或
+dumpsys activity binder-calls-stats
+
+# 针对某个进程
+dumpsys binder_calls_stats --per-process
+dumpsys binder_calls_stats --per-uid
+
+# 重置统计
+dumpsys binder_calls_stats --reset
+</code></pre></div>
+<blockquote>
+<p><code>binder_calls_stats</code> 能看到「谁调用了什么接口多少次、花了多少时间、有没有超过慢调用阈值」。</p>
+</blockquote>
+<h3 id="section-4-3-binder-事务追踪-perfetto-ftrace">4.3 Binder 事务追踪（Perfetto / ftrace）</h3>
+<p>Binder 驱动内置了 ftrace 打点，可用 Perfetto / systrace 抓取：</p>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># ftrace 直接看
+echo 1 &gt; /sys/kernel/debug/tracing/events/binder/enable
+cat /sys/kernel/debug/tracing/trace_pipe
+echo 0 &gt; /sys/kernel/debug/tracing/events/binder/enable
+</code></pre></div>
+<p>Perfetto 数据源：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>数据源</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>android.binder</code></td>
+<td>Binder 事务（开始/结束、目标进程、code）</td>
+</tr>
+<tr>
+<td><code>linux.ftrace</code> + <code>binder</code> 事件</td>
+<td>同上，更底层</td>
+</tr>
+</tbody>
+</table></div>
+<p>在 Perfetto UI 里加 <code>Binder Transactions</code> 轨道，可以看到每次跨进程调用的耗时、目标进程。</p>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># 命令行抓取
+perfetto -c - --txt -o /data/misc/perfetto-traces/trace &lt;&lt;EOF
+buffers { size_kb: 8192 }
+data_sources { config { name: &quot;android.binder&quot; } }
+data_sources { config { name: &quot;linux.ftrace&quot;
+  ftrace_config {
+    ftrace_events: &quot;binder/binder_transaction&quot;
+    ftrace_events: &quot;binder/binder_transaction_received&quot;
+  }}}
+duration_ms: 5000
+EOF
+</code></pre></div>
+<h3 id="section-4-4-systrace-atrace">4.4 systrace / atrace</h3>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash">atrace --list_categories | grep -i binder
+# binder_driver  ← Binder 驱动相关
+# binder_lock
+# binder_driver
+</code></pre></div>
+<h3 id="section-4-5-logcat-相关标签">4.5 logcat 相关标签</h3>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># Binder 驱动的错误（TransactionTooLargeException 会打印）
+logcat -s Binder:* IPCThreadState:* binder:*
+
+# 常见日志
+# &quot;!!! FAILED BINDER TRANSACTION !!!  (parcel size = ...)&quot;
+# &quot;Binder transaction failure: ...&quot;
+# &quot;oneway spam detected&quot;
+# &quot;Binder:1234_3: ...&quot;
+</code></pre></div>
+<h3 id="section-4-6-strace-看实际的-ioctl">4.6 strace：看实际的 ioctl</h3>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># 抓某个进程的所有 ioctl
+strace -f -e trace=ioctl -p &lt;pid&gt;
+# 会看到：
+# ioctl(8, BINDER_WRITE_READ, {write_size=..., ...}) = 0
+</code></pre></div>
+<h3 id="section-4-7-java-侧快速自测">4.7 Java 侧快速自测</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// 判断一个 IBinder 是本地的还是远程的
+public static boolean isRemote(IBinder b) {
+    return b instanceof android.os.BinderProxy;
+}
+
+// 打日志看调用方身份
+Log.d(TAG, &quot;caller pid=&quot; + Binder.getCallingPid()
+         + &quot; uid=&quot; + Binder.getCallingUid()
+         + &quot; sid=&quot; + Binder.getCallingSid());   // Android 10+
+</code></pre></div>
+<hr>
+<h2 id="section-5-版本演进时间线">5. 版本演进时间线</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>版本</th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Android 1.0</td>
+<td>Binder 首次出现（基于 BeOS/Palm 的 OpenBinder 设计）</td>
+</tr>
+<tr>
+<td>Android 4.3</td>
+<td><code>TransactionTooLargeException</code> 从 <code>RemoteException</code> 拆出</td>
+</tr>
+<tr>
+<td>Android 8.0 (O)</td>
+<td>拆出 <code>hwbinder</code> / <code>vndbinder</code>；<code>servicemanager</code> 用 C++ 重写；内核引入 <code>binder_alloc.c</code>（把分配逻辑从 <code>binder.c</code> 拆出）</td>
+</tr>
+<tr>
+<td>Android 10 (Q)</td>
+<td><code>binderfs</code>；<code>BR_TRANSACTION_SEC_CTX</code> + <code>binder_transaction_data_secctx</code>（SELinux 上下文随事务传递）；<code>Binder.getCallingSid()</code></td>
+</tr>
+<tr>
+<td>Android 11 (R)</td>
+<td>Java <code>BinderProxy</code> 改用单个 native death recipient + Java 侧列表分发；<code>oneway_spam</code> 检测；AIDL 全面替代 HIDL</td>
+</tr>
+<tr>
+<td>Android 12 (S)</td>
+<td><code>BINDER_SET_CONTEXT_MGR_EXT</code>；<code>libbinder</code> 增加 <code>BinderProxy</code>/<code>Parcel</code> 的一些稳定性改进</td>
+</tr>
+<tr>
+<td>Android 13+</td>
+<td><code>Parcel</code> 构造函数标记 <code>@UnsupportedAppUsage</code>；oneway 优先级继承改进；冻结进程（cached app freezer）与 Binder 的交互</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>内核 vs 用户态</strong>：<code>BC_*</code>/<code>BR_*</code> 命令和 <code>binder_transaction_data</code> 布局是<strong>用户态 ABI</strong>，几乎不变；<code>binder_alloc</code>、<code>binderfs</code>、secctx 是内核实现，随内核版本演进。</p>
+</blockquote>
+<hr>
+<h2 id="section-6-推荐的阅读路径">6. 推荐的阅读路径</h2>
+<h3 id="section-路径-a-先建立整体认知-1-2-天">路径 A：先建立整体认知（1~2 天）</h3>
+<ol>
+<li>本目录 <a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/"><code>README.md</code></a> → <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/"><code>01-架构总览.md</code></a></li>
+<li>看 AIDL 生成代码：写一个最简单的 <code>.aidl</code>，编译后反编译看生成的 Java</li>
+<li><code>frameworks/native/libs/binder/IPCThreadState.cpp</code> 的 <code>transact()</code> / <code>talkWithDriver()</code> / <code>executeCommand()</code></li>
+<li><code>frameworks/native/libs/binder/BpBinder.cpp</code>（很短，100 行左右的核心）</li>
+</ol>
+<h3 id="section-路径-b-深入内核-3-5-天">路径 B：深入内核（3~5 天）</h3>
+<ol>
+<li><code>include/uapi/linux/android/binder.h</code> —— 先把协议头读完（不长）</li>
+<li><code>binder_thread_write()</code> → <code>binder_transaction()</code>（这是最长的一段，慢慢读）</li>
+<li><code>binder_thread_read()</code></li>
+<li><code>binder_alloc.c</code> 的 <code>binder_alloc_new_buf()</code> / <code>binder_alloc_copy_user_to_buffer()</code></li>
+<li><code>binder_proc_transaction()</code> / <code>binder_node</code> 引用计数相关函数</li>
+</ol>
+<h3 id="section-路径-c-动手实践">路径 C：动手实践</h3>
+<ol>
+<li>用 <code>debugfs</code> 观察一个 app 进程的 binder 状态，对照 <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a> 的字段表。</li>
+<li>写一个 AIDL 服务，在 <code>onTransact</code> 里打印 <code>Binder.getCallingUid()</code>，从另一个 app 调用，观察。</li>
+<li>故意构造一个超过 1MB 的 Parcel，观察 <code>TransactionTooLargeException</code>（以及 <code>logcat -s Binder</code> 的日志）。</li>
+<li>用 Perfetto 抓一次 <code>Binder Transactions</code>，看两次跨进程调用的耗时。</li>
+<li>写一个 oneway 接口，连续调 1000 次，观察是否有序、是否丢。</li>
+<li>用 <code>linkToDeath</code> 监听一个服务，然后 <code>kill</code> 它，观察 <code>binderDied()</code> 回调在哪个线程。</li>
+</ol>
+<hr>
+<h2 id="section-7-自测题-检验是否真的理清">7. 自测题（检验是否真的理清）</h2>
+<h3 id="section-基础">基础</h3>
+<ol>
+<li><code>Binder</code>（Java 类）和 <code>BinderProxy</code>（Java 类）分别在哪里被使用？它们的 <code>transact</code> 方法分别做什么？</li>
+<li>句柄（handle）是什么？为什么句柄 0 是特殊的？</li>
+<li><code>IBinder.transact(code, data, reply, flags)</code> 里 <code>code</code> 是什么？<code>INTERFACE_TRANSACTION</code> 的值是多少，为什么？</li>
+<li>AIDL 生成的 <code>asInterface</code> 里，<code>queryLocalInterface</code> 返回非 null 意味着什么？</li>
+</ol>
+<h3 id="section-封装">封装</h3>
+<ol start="5">
+<li><code>binder_transaction_data</code> 里 <code>target.handle</code> 和 <code>target.ptr</code> 分别在什么场景用？</li>
+<li><code>data.ptr.offsets</code> 指向的数组里存的是什么？为什么需要它？</li>
+<li><code>flat_binder_object</code> 在发送方和接收方看到的 <code>type</code> 为什么不一样？</li>
+<li><code>sender_pid</code> / <code>sender_euid</code> 是谁填的？为什么要这样设计？</li>
+</ol>
+<h3 id="section-内核">内核</h3>
+<ol start="9">
+<li>Binder 的「一次拷贝」具体是拷贝了哪一次？为什么不需要第二次？</li>
+<li>缓冲区是在<strong>发送方</strong>还是<strong>接收方</strong>的地址空间里分配的？为什么？</li>
+<li><code>binder_ref.desc</code> 和 <code>binder_node.ptr</code> 分别是什么？它们之间怎么关联？</li>
+<li>内核怎么找到「handle 42 对应的对象」？</li>
+</ol>
+<h3 id="section-进阶">进阶</h3>
+<ol start="13">
+<li><code>BC_ACQUIRE</code> / <code>BR_ACQUIRE</code> 分别是谁发给谁的？为什么需要反向通知？</li>
+<li>死亡通知是怎么实现的？<code>binderDied()</code> 回调在哪个线程执行？</li>
+<li>oneway 事务在什么情况下会排队？排到哪个队列？</li>
+<li>Binder 线程池什么时候扩充？上限是多少？</li>
+<li><code>TransactionTooLargeException</code> 的产生链是什么？</li>
+<li>为什么 Binder 调用可能死锁？怎么避免？</li>
+</ol>
+<h3 id="section-参考答案位置">参考答案位置</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>题号</th>
+<th>章节</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1~4</td>
+<td><a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/"><code>03-RPC原理.md</code></a></td>
+</tr>
+<tr>
+<td>5~8</td>
+<td><a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><code>02-消息封装.md</code></a></td>
+</tr>
+<tr>
+<td>9~12</td>
+<td><a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a></td>
+</tr>
+<tr>
+<td>13~18</td>
+<td><a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a></td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-8-延伸资料">8. 延伸资料</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>资料</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AOSP <code>frameworks/native/libs/binder/README.md</code></td>
+<td>libbinder 官方说明</td>
+</tr>
+<tr>
+<td><a href="https://cs.android.com">cs.android.com</a></td>
+<td>AOSP 源码在线检索</td>
+</tr>
+<tr>
+<td><a href="https://elixir.bootlin.com/linux/latest/source/drivers/android/binder.c">elixir.bootlin.com/linux</a></td>
+<td>Linux 内核 Binder 驱动源码，带交叉引用</td>
+</tr>
+<tr>
+<td>Android 官方文档：AIDL</td>
+<td><code>developer.android.com/develop/background-work/services/aidl</code></td>
+</tr>
+<tr>
+<td>Android 官方文档：Binder IPC</td>
+<td><code>source.android.com/docs/core/architecture/aidl</code></td>
+</tr>
+<tr>
+<td>《深入理解 Android 内核设计思想》（林学森）</td>
+<td>有 Binder 驱动逐行分析</td>
+</tr>
+<tr>
+<td>《Android 源码情景分析》</td>
+<td>Binder 全链路分析（较老但思路清晰）</td>
+</tr>
+<tr>
+<td><code>frameworks/base/core/java/android/os/Binder.java</code> 的注释</td>
+<td>官方对 Binder 对象生命周期的说明</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-9-一句话总结">9. 一句话总结</h2>
+<blockquote>
+<p><strong>Binder = 内核代理的对象引用 + 一次拷贝的缓冲区 + 自动线程池。</strong></p>
+<p>用户态把「方法调用」序列化成 <code>Parcel</code>，包上 <code>binder_transaction_data</code>（带句柄和 code），用一次 <code>ioctl</code> 交给内核；内核用句柄查出目标对象所在进程，在<strong>目标进程</strong>的缓冲区里分配空间、做<strong>唯一一次拷贝</strong>，然后把事务挂到目标线程的队列上并唤醒它；目标线程从 <code>ioctl</code> 返回后，把缓冲区包成 <code>Parcel</code>，通过虚函数 <code>onTransact</code> 分派到真正的实现；返回值再以对称的方式原路送回。</p>
+</blockquote>
+<hr>
+<p>上一篇：<a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a> ｜ 回到 <a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/"><code>README.md</code></a></p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/00-android-binder消息流转全解/"><small>上一篇</small><strong>Android Binder 消息流转全解：系列导读</strong></a><a href="/2026/11/11/06-进阶专题/"><small>下一篇</small><strong>Android Binder 06：进阶专题</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-1-aosp-源码路径总表" title="1. AOSP 源码路径总表">1. AOSP 源码路径总表</a></li><li class="toc-level-3"><a href="#section-1-1-java-框架层" title="1.1 Java 框架层">1.1 Java 框架层</a></li><li class="toc-level-3"><a href="#section-1-2-jni-胶水层" title="1.2 JNI 胶水层">1.2 JNI 胶水层</a></li><li class="toc-level-3"><a href="#section-1-3-native-库层-libbinder" title="1.3 Native 库层（libbinder）">1.3 Native 库层（libbinder）</a></li><li class="toc-level-3"><a href="#section-1-4-servicemanager-进程" title="1.4 ServiceManager 进程">1.4 ServiceManager 进程</a></li><li class="toc-level-3"><a href="#section-1-5-内核驱动" title="1.5 内核驱动">1.5 内核驱动</a></li><li class="toc-level-2"><a href="#section-2-关键函数索引-按调用顺序" title="2. 关键函数索引（按调用顺序）">2. 关键函数索引（按调用顺序）</a></li><li class="toc-level-3"><a href="#section-client-侧-发送" title="Client 侧（发送）">Client 侧（发送）</a></li><li class="toc-level-3"><a href="#section-内核侧" title="内核侧">内核侧</a></li><li class="toc-level-3"><a href="#section-server-侧-接收" title="Server 侧（接收）">Server 侧（接收）</a></li><li class="toc-level-2"><a href="#section-3-关键结构体索引" title="3. 关键结构体索引">3. 关键结构体索引</a></li><li class="toc-level-2"><a href="#section-4-调试手段" title="4. 调试手段">4. 调试手段</a></li><li class="toc-level-3"><a href="#section-4-1-debugfs-需要-root" title="4.1 debugfs（需要 root）">4.1 debugfs（需要 root）</a></li><li class="toc-level-3"><a href="#section-4-2-dumpsys" title="4.2 dumpsys">4.2 dumpsys</a></li><li class="toc-level-3"><a href="#section-4-3-binder-事务追踪-perfetto-ftrace" title="4.3 Binder 事务追踪（Perfetto / ftrace）">4.3 Binder 事务追踪（Perfetto / ftrace）</a></li><li class="toc-level-3"><a href="#section-4-4-systrace-atrace" title="4.4 systrace / atrace">4.4 systrace / atrace</a></li><li class="toc-level-3"><a href="#section-4-5-logcat-相关标签" title="4.5 logcat 相关标签">4.5 logcat 相关标签</a></li><li class="toc-level-3"><a href="#section-4-6-strace-看实际的-ioctl" title="4.6 strace：看实际的 ioctl">4.6 strace：看实际的 ioctl</a></li><li class="toc-level-3"><a href="#section-4-7-java-侧快速自测" title="4.7 Java 侧快速自测">4.7 Java 侧快速自测</a></li><li class="toc-level-2"><a href="#section-5-版本演进时间线" title="5. 版本演进时间线">5. 版本演进时间线</a></li><li class="toc-level-2"><a href="#section-6-推荐的阅读路径" title="6. 推荐的阅读路径">6. 推荐的阅读路径</a></li><li class="toc-level-3"><a href="#section-路径-a-先建立整体认知-1-2-天" title="路径 A：先建立整体认知（1~2 天）">路径 A：先建立整体认知（1~2 天）</a></li><li class="toc-level-3"><a href="#section-路径-b-深入内核-3-5-天" title="路径 B：深入内核（3~5 天）">路径 B：深入内核（3~5 天）</a></li><li class="toc-level-3"><a href="#section-路径-c-动手实践" title="路径 C：动手实践">路径 C：动手实践</a></li><li class="toc-level-2"><a href="#section-7-自测题-检验是否真的理清" title="7. 自测题（检验是否真的理清）">7. 自测题（检验是否真的理清）</a></li><li class="toc-level-3"><a href="#section-基础" title="基础">基础</a></li><li class="toc-level-3"><a href="#section-封装" title="封装">封装</a></li><li class="toc-level-3"><a href="#section-内核" title="内核">内核</a></li><li class="toc-level-3"><a href="#section-进阶" title="进阶">进阶</a></li><li class="toc-level-3"><a href="#section-参考答案位置" title="参考答案位置">参考答案位置</a></li><li class="toc-level-2"><a href="#section-8-延伸资料" title="8. 延伸资料">8. 延伸资料</a></li><li class="toc-level-2"><a href="#section-9-一句话总结" title="9. 一句话总结">9. 一句话总结</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

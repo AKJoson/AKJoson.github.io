@@ -1,0 +1,11 @@
+%% Binder 线程池按需扩充
+flowchart TB
+    A["内核: 有事务, 但没有空闲 binder 线程"] --> B{"requested_threads == 0<br/>且 waiting_threads 为空<br/>且 started < max_threads"}
+    B -->|"是"| C["在返回流里插入 BR_SPAWN_LOOPER"]
+    C --> D["executeCommand:<br/>spawnPooledThread(false)"]
+    D --> E["新线程 joinThreadPool(false)<br/>发送 BC_REGISTER_LOOPER"]
+    E --> F["内核把 requested_threads<br/>转为实际线程"]
+    B -->|"否"| G["把事务放进 proc->todo<br/>等现有线程处理"]
+
+    style C fill:#ffe9c7
+    style E fill:#d8ecff

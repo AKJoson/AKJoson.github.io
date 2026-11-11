@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 消息流转全解：系列导读 · 殷仔的博客</title><meta name="description" content="从一次跨进程调用出发，梳理 Binder 的架构、消息封装、RPC、内核与完整消息流转，提供系列阅读顺序和速查。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 消息流转全解：系列导读"><meta property="og:description" content="从一次跨进程调用出发，梳理 Binder 的架构、消息封装、RPC、内核与完整消息流转，提供系列阅读顺序和速查。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 消息流转全解：系列导读</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 8 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-文档目录">文档目录</a></li><li><a href="#section-30-秒速查">30 秒速查</a></li><li><a href="#section-一条调用链-java-同步-rpc">一条调用链（Java 同步 RPC）</a></li><li><a href="#section-三个最容易混淆的名词">三个最容易混淆的名词</a></li><li><a href="#section-四个角色">四个角色</a></li><li><a href="#section-三个-binder-域-三个设备节点">三个 Binder 域（三个设备节点）</a></li><li><a href="#section-建议的阅读顺序">建议的阅读顺序</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<p>本目录从「一次跨进程调用到底发生了什么」这个问题出发，自顶向下拆解 Android Binder：</p>
+<ul>
+<li>应用层写的 <code>service.echo(&quot;hi&quot;)</code> 是怎么变成一次系统调用的？</li>
+<li>RPC 是怎么实现的（代理模式 / 句柄 / 对象引用）？</li>
+<li>数据是怎么被打包成 <code>Parcel</code> 和 <code>binder_transaction_data</code> 的？</li>
+<li>内核驱动拿到数据后怎么找到目标进程、怎么投递、怎么唤醒对方？</li>
+<li>对端怎么解包、执行、把结果送回来？</li>
+</ul>
+<hr>
+<h2 id="section-文档目录">文档目录</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+<th>适合什么时候看</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/"><code>01-架构总览.md</code></a></td>
+<td>Binder 的四层架构、四个角色、三个 Binder 域、与 AIDL/HIDL 的关系</td>
+<td>第一遍，建立全局图景</td>
+</tr>
+<tr>
+<td><a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><code>02-消息封装.md</code></a></td>
+<td><code>Parcel</code> 序列化格式、<code>flat_binder_object</code>、<code>binder_transaction_data</code>、<code>binder_write_read</code>、<code>BC_/BR_</code> 命令全表</td>
+<td>想搞清楚「字节是怎么排的」</td>
+</tr>
+<tr>
+<td><a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/"><code>03-RPC原理.md</code></a></td>
+<td>代理-桩模式、AIDL 生成代码逐行解析、句柄机制、<code>transact</code>/<code>onTransact</code> 语义契约</td>
+<td>想搞清楚「怎么实现远程调用」</td>
+</tr>
+<tr>
+<td><a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a></td>
+<td><code>binder_proc</code> / <code>binder_thread</code> / <code>binder_node</code> / <code>binder_ref</code> / <code>binder_buffer</code>、mmap 与「一次拷贝」</td>
+<td>想搞清楚「内核里到底存了什么」</td>
+</tr>
+<tr>
+<td><a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/"><code>05-完整消息流转.md</code></a></td>
+<td><strong>核心</strong>：一次同步 RPC 的端到端 12 步时序、oneway、回调、ServiceManager 注册</td>
+<td>想一次把链路串起来</td>
+</tr>
+<tr>
+<td><a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a></td>
+<td>引用计数、死亡通知、oneway 队列、线程池、SELinux secctx、fd 传递、大小限制</td>
+<td>想把细节补齐</td>
+</tr>
+<tr>
+<td><a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/"><code>07-源码索引与调试.md</code></a></td>
+<td>AOSP 源码路径表、关键函数索引、debugfs/dumpsys/systrace 调试手法、学习路径、自测题</td>
+<td>想去读源码 / 排查问题</td>
+</tr>
+</tbody>
+</table></div>
+<p>图源文件在 <a href="/assets/binder/diagrams/README.md"><code>diagrams/</code></a> 目录（<code>.mmd</code> 格式，可独立渲染）。</p>
+<p>可运行的完整示例在 <a href="/assets/binder/examples/README.md"><code>examples/</code></a> 目录（<code>.aidl</code> + 生成代码 + 服务端/客户端 Java 与 C++ 实现 + <code>Android.bp</code>）。</p>
+<hr>
+<h2 id="section-30-秒速查">30 秒速查</h2>
+<h3 id="section-一条调用链-java-同步-rpc">一条调用链（Java 同步 RPC）</h3>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">App 代码
+  └─ IMyService.Stub.Proxy.echo()          // AIDL 生成，写 Parcel
+      └─ BinderProxy.transact(code, data, reply, flags)   // Java native 方法
+          └─ BpBinder::transact()          // native libbinder
+              └─ IPCThreadState::transact()
+                  ├─ writeTransactionData(BC_TRANSACTION, tr)  // 打包
+                  └─ talkWithDriver()                          // ioctl
+                      └─ ioctl(/dev/binder, BINDER_WRITE_READ, &amp;bwr)
+                          ══════════ 进入内核 ══════════
+                          binder_ioctl_write_read()
+                            ├─ binder_thread_write() → binder_transaction()
+                            │     ├─ handle → binder_ref → binder_node → 目标进程
+                            │     ├─ 在「目标进程」的 binder buffer 里分配空间
+                            │     ├─ 把负载从发送方用户空间拷贝进去（就这一次拷贝）
+                            │     └─ 唤醒目标线程的 todo 队列
+                            └─ binder_thread_read() → 返回 BR_TRANSACTION
+                          ══════════ 回到用户态 ══════════
+                      └─ executeCommand(BR_TRANSACTION)
+                          └─ BBinder::transact() → onTransact()
+                              └─ JavaBBinder(JNI) → Binder.execTransact()
+                                  └─ IMyService.Stub.onTransact() → 真正的实现
+                                      └─ 写 reply Parcel → BC_REPLY（原路返回）
+</code></pre></div>
+<h3 id="section-三个最容易混淆的名词">三个最容易混淆的名词</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>名词</th>
+<th>在哪一层</th>
+<th>是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Binder</code> / <code>BinderProxy</code></td>
+<td>Java 层</td>
+<td><code>android.os.Binder</code> 是<strong>本地对象</strong>（服务端），<code>android.os.BinderProxy</code> 是<strong>远程代理</strong>（客户端）</td>
+</tr>
+<tr>
+<td><code>BBinder</code> / <code>BpBinder</code></td>
+<td>Native 层</td>
+<td>同上，是 Java 两个类的 native 对应物</td>
+</tr>
+<tr>
+<td><code>binder_node</code> / <code>binder_ref</code></td>
+<td>内核层</td>
+<td><code>node</code> 是「实体」（服务端进程里的对象），<code>ref</code> 是「引用」（客户端进程指向它的句柄记录）</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>一句话记忆</strong>：<code>handle</code>（句柄）是<strong>内核发给客户端进程的一个整数</strong>，客户端进程拿它去跟内核说「我要调用这个对象」；内核再用自己的 <code>binder_ref → binder_node</code> 映射找到真正的服务端对象。</p>
+<h3 id="section-四个角色">四个角色</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>角色</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Client</strong></td>
+<td>发起调用的一方，持有 <code>handle</code></td>
+</tr>
+<tr>
+<td><strong>Server</strong></td>
+<td>提供实现的一方，持有真正的 Binder 对象（<code>binder_node</code>）</td>
+</tr>
+<tr>
+<td><strong>ServiceManager</strong></td>
+<td>名字服务，句柄固定为 <code>0</code>，负责 <code>addService</code> / <code>getService</code></td>
+</tr>
+<tr>
+<td><strong>Binder 驱动</strong></td>
+<td>内核里的「邮局」，负责对象引用翻译、内存分配、线程唤醒</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-三个-binder-域-三个设备节点">三个 Binder 域（三个设备节点）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>设备节点</th>
+<th>用途</th>
+<th>谁在用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/dev/binder</code></td>
+<td>框架层 Binder</td>
+<td>应用、system_server</td>
+</tr>
+<tr>
+<td><code>/dev/hwbinder</code></td>
+<td>HIDL / AIDL over hwbinder</td>
+<td>HAL 硬件抽象层</td>
+</tr>
+<tr>
+<td><code>/dev/vndbinder</code></td>
+<td>Vendor Binder</td>
+<td>vendor 进程之间</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-建议的阅读顺序">建议的阅读顺序</h2>
+<ol>
+<li><strong>先看图</strong>：<code>diagrams/01-整体架构.mmd</code>、<code>diagrams/02-对象模型.mmd</code></li>
+<li><strong>再看时序</strong>：<a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/"><code>05-完整消息流转.md</code></a> 里的时序图（不用抠细节，先建立主线）</li>
+<li><strong>然后补封装</strong>：<a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><code>02-消息封装.md</code></a>（<code>Parcel</code> / <code>binder_transaction_data</code>）</li>
+<li><strong>然后补 RPC</strong>：<a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/"><code>03-RPC原理.md</code></a>（代理模式 / 句柄）</li>
+<li><strong>最后补内核</strong>：<a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a> + <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a></li>
+<li><strong>动手</strong>：<a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/"><code>07-源码索引与调试.md</code></a> 里的 debugfs 手法</li>
+</ol>
+<blockquote>
+<p>注：本文档以 AOSP <code>main</code>/近期分支（Android 12~15）为准。Binder 的<strong>用户态协议</strong>（<code>BC_/BR_</code> 命令、<code>binder_transaction_data</code> 布局）自 2008 年以来基本稳定；<strong>内核实现</strong>（<code>binder_alloc</code>、<code>binderfs</code>、<code>BR_TRANSACTION_SEC_CTX</code>）随版本有演进，文中会标注引入版本。</p>
+</blockquote>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/10/06/power锟的大人学-阅读感悟/"><small>上一篇</small><strong>《Power锟的大人学》一本教你生命力的书</strong></a><a href="/2026/11/11/07-源码索引与调试/"><small>下一篇</small><strong>Android Binder 07：源码索引与调试</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-文档目录" title="文档目录">文档目录</a></li><li class="toc-level-2"><a href="#section-30-秒速查" title="30 秒速查">30 秒速查</a></li><li class="toc-level-3"><a href="#section-一条调用链-java-同步-rpc" title="一条调用链（Java 同步 RPC）">一条调用链（Java 同步 RPC）</a></li><li class="toc-level-3"><a href="#section-三个最容易混淆的名词" title="三个最容易混淆的名词">三个最容易混淆的名词</a></li><li class="toc-level-3"><a href="#section-四个角色" title="四个角色">四个角色</a></li><li class="toc-level-3"><a href="#section-三个-binder-域-三个设备节点" title="三个 Binder 域（三个设备节点）">三个 Binder 域（三个设备节点）</a></li><li class="toc-level-2"><a href="#section-建议的阅读顺序" title="建议的阅读顺序">建议的阅读顺序</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

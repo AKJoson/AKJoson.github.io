@@ -1,0 +1,16 @@
+%% oneway 异步调用时序
+sequenceDiagram
+    participant C as Client 线程
+    participant K as 内核
+    participant S as Server 线程
+
+    C->>K: ioctl(BC_TRANSACTION, TF_ONE_WAY)
+    K->>K: 投递到 Server 线程 todo<br/>或 node->async_todo
+    K-->>C: BR_TRANSACTION_COMPLETE
+    Note over C: 立即返回, 不等结果
+    Note over C: 继续执行其它逻辑
+
+    Note over K,S: 稍后...
+    K->>S: 唤醒, BR_TRANSACTION
+    S->>S: 执行实现
+    Note over S: 不发送 BC_REPLY

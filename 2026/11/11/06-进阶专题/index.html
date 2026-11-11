@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 06：进阶专题 · 殷仔的博客</title><meta name="description" content="补齐引用计数、死亡通知、oneway 队列、线程池、SELinux 上下文、文件描述符传递及事务大小限制。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 06：进阶专题"><meta property="og:description" content="补齐引用计数、死亡通知、oneway 队列、线程池、SELinux 上下文、文件描述符传递及事务大小限制。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 06：进阶专题</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 24 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-1-引用计数与对象生命周期">1. 引用计数与对象生命周期</a></li><li><a href="#section-1-1-五个计数">1.1 五个计数</a></li><li><a href="#section-1-2-强引用-vs-弱引用">1.2 强引用 vs 弱引用</a></li><li><a href="#section-1-3-反向通知-br-acquire-br-release">1.3 反向通知：BR_ACQUIRE / BR_RELEASE</a></li><li><a href="#section-1-4-对象死亡的两个层次">1.4 对象死亡的两个层次</a></li><li><a href="#section-2-死亡通知-death-notification">2. 死亡通知（Death Notification）</a></li><li><a href="#section-2-1-时序">2.1 时序</a></li><li><a href="#section-2-2-内核里的数据结构">2.2 内核里的数据结构</a></li><li><a href="#section-2-3-native-侧代码">2.3 native 侧代码</a></li><li><a href="#section-2-4-java-侧代码">2.4 Java 侧代码</a></li><li><a href="#section-2-5-常见坑">2.5 常见坑</a></li><li><a href="#section-3-oneway-的排队机制-深入">3. oneway 的排队机制（深入）</a></li><li><a href="#section-3-1-为什么-oneway-只能用一半缓冲区">3.1 为什么 oneway 只能用一半缓冲区</a></li><li><a href="#section-3-2-oneway-spam">3.2 &quot;oneway spam&quot;</a></li><li><a href="#section-4-binder-线程池">4. Binder 线程池</a></li><li><a href="#section-4-1-初始化">4.1 初始化</a></li><li><a href="#section-4-2-jointhreadpool-binder-线程的主循环">4.2 joinThreadPool：Binder 线程的主循环</a></li><li><a href="#section-4-3-线程池如何按需扩充-br-spawn-looper">4.3 线程池如何按需扩充：BR_SPAWN_LOOPER</a></li><li><a href="#section-4-4-线程池上限">4.4 线程池上限</a></li><li><a href="#section-4-5-经典死锁-binder-线程池耗尽">4.5 经典死锁：Binder 线程池耗尽</a></li><li><a href="#section-5-selinux-安全上下文-android-10">5. SELinux 安全上下文（Android 10+）</a></li><li><a href="#section-5-1-背景">5.1 背景</a></li><li><a href="#section-5-2-数据结构与命令">5.2 数据结构与命令</a></li><li><a href="#section-5-3-native-侧读取">5.3 native 侧读取</a></li><li><a href="#section-6-文件描述符传递">6. 文件描述符传递</a></li><li><a href="#section-6-1-编码">6.1 编码</a></li><li><a href="#section-6-2-内核翻译">6.2 内核翻译</a></li><li><a href="#section-6-3-java-侧的-fd">6.3 Java 侧的 fd</a></li><li><a href="#section-6-4-权限">6.4 权限</a></li><li><a href="#section-7-大小限制与-transactiontoolargeexception">7. 大小限制与 TransactionTooLargeException</a></li><li><a href="#section-7-1-三层限制">7.1 三层限制</a></li><li><a href="#section-7-2-异常的产生链">7.2 异常的产生链</a></li><li><a href="#section-7-3-为什么-明明没到-1mb-也报错">7.3 为什么「明明没到 1MB 也报错」</a></li><li><a href="#section-8-嵌套调用与-transaction-stack">8. 嵌套调用与 transaction_stack</a></li><li><a href="#section-8-1-允许的嵌套">8.1 允许的嵌套</a></li><li><a href="#section-8-2-循环-死锁">8.2 循环 → 死锁</a></li><li><a href="#section-9-常见坑汇总">9. 常见坑汇总</a></li><li><a href="#section-10-与其它-ipc-的对比">10. 与其它 IPC 的对比</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<p>前面五章讲清了主干，这一章补齐容易踩坑和容易被问到的细节。</p>
+<hr>
+<h2 id="section-1-引用计数与对象生命周期">1. 引用计数与对象生命周期</h2>
+<p>Binder 的对象生命周期管理是它最复杂也最容易出错的部分。</p>
+<h3 id="section-1-1-五个计数">1.1 五个计数</h3>
+<p><code>binder_ref</code> 上：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_ref_data {
+	int debug_id;
+	uint32_t desc;
+	int strong;    /* 这个进程内，指向该 node 的强引用数 */
+	int weak;      /* 弱引用数 */
+};
+</code></pre></div>
+<p><code>binder_node</code> 上：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>计数</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>internal_strong_refs</code></td>
+<td>「有多少个别的进程在用强引用句柄指向我」</td>
+</tr>
+<tr>
+<td><code>local_strong_refs</code></td>
+<td>「我自己的进程里，有多少个强引用（<code>BC_ACQUIRE</code> 发出来的）」</td>
+</tr>
+<tr>
+<td><code>local_weak_refs</code></td>
+<td>「我自己的进程里，有多少个弱引用（<code>BC_INCREFS</code> 发出来的）」</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-1-2-强引用-vs-弱引用">1.2 强引用 vs 弱引用</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>强引用（strong）</th>
+<th>弱引用（weak）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java</td>
+<td><code>BinderProxy</code> 被普通持有</td>
+<td><code>Parcel.writeWeakBinder</code></td>
+</tr>
+<tr>
+<td>native</td>
+<td><code>sp&lt;IBinder&gt;</code> / <code>BpBinder::incStrongHandle</code></td>
+<td><code>wp&lt;IBinder&gt;</code> / <code>BpBinder::incWeakHandle</code></td>
+</tr>
+<tr>
+<td>内核命令</td>
+<td><code>BC_ACQUIRE</code> / <code>BC_RELEASE</code></td>
+<td><code>BC_INCREFS</code> / <code>BC_DECREFS</code></td>
+</tr>
+<tr>
+<td>语义</td>
+<td>保证对象<strong>不被销毁</strong></td>
+<td>只保证「能查询到它是否还活着」</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>规则</strong>：有强引用 → node 一定存活；只有弱引用 → node 可能「半死」（对象已释放，但 node 结构还在，可以被「复活」）。</p>
+<h3 id="section-1-3-反向通知-br-acquire-br-release">1.3 反向通知：<code>BR_ACQUIRE</code> / <code>BR_RELEASE</code></h3>
+<p>这是很多人困惑的地方。假设 Client 拿到了 Server 对象的句柄：</p>
+<p><img src="/images/binder/06-1.png" alt="1.3 反向通知：BR_ACQUIRE / BR_RELEASE（图 1）"></p>
+<p><strong>为什么需要这个反向通知？</strong> 因为跨进程的引用必须映射到<strong>本地的强/弱引用</strong>。只有 Server 进程自己知道它的 <code>BBinder</code> 是不是还能被释放。这个机制让「C++ 的 <code>sp&lt;&gt;</code>/<code>wp&lt;&gt;</code> 引用计数」和「跨进程引用」保持了一致。</p>
+<h3 id="section-1-4-对象死亡的两个层次">1.4 对象死亡的两个层次</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>含义</th>
+<th>触发条件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>对象死亡</strong></td>
+<td><code>binder_node</code> 被释放，但 <code>binder_ref</code> 还在（变成「dead ref」）</td>
+<td>拥有者进程释放了对象（所有引用都没了）</td>
+</tr>
+<tr>
+<td><strong>进程死亡</strong></td>
+<td>整个 <code>binder_proc</code> 被销毁，所有 node 和 ref 都失效</td>
+<td>进程退出</td>
+</tr>
+</tbody>
+</table></div>
+<p>对 Client 来说：</p>
+<ul>
+<li><strong>对象死亡</strong> → 后续调用返回 <code>DEAD_OBJECT</code> 或 <code>UNKNOWN_TRANSACTION</code></li>
+<li><strong>进程死亡</strong> → 触发死亡通知（见第 2 节）</li>
+</ul>
+<hr>
+<h2 id="section-2-死亡通知-death-notification">2. 死亡通知（Death Notification）</h2>
+<p><strong>用途</strong>：当服务进程挂了，客户端要知道，以便清理资源 / 重连。</p>
+<h3 id="section-2-1-时序">2.1 时序</h3>
+<p><img src="/images/binder/06-2.png" alt="2.1 时序（图 2）"></p>
+<h3 id="section-2-2-内核里的数据结构">2.2 内核里的数据结构</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_ref_death {
+	struct binder_work work;
+	binder_uintptr_t cookie;    /* 用户态传进来的标识（native 里是 BpBinder*） */
+};
+</code></pre></div>
+<p>挂在 <code>binder_ref.death</code> 上。</p>
+<h3 id="section-2-3-native-侧代码">2.3 native 侧代码</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/BpBinder.cpp
+status_t BpBinder::linkToDeath(const sp&lt;DeathRecipient&gt;&amp; recipient,
+                               void* cookie, uint32_t flags)
+{
+    AutoMutex _l(mLock);
+
+    Obituary ob;
+    ob.recipient = recipient;
+    ob.cookie = cookie;
+    ob.flags = flags;
+    mObituaries.push_back(ob);
+
+    if (mAlive &amp;&amp; !mObituaries.empty()) {
+        /* ★ 通知内核 */
+        status_t status = IPCThreadState::self()-&gt;requestDeathNotification(mHandle, this);
+        if (status != NO_ERROR) {
+            mObituaries.pop_back();
+        }
+        return status;
+    }
+    return NO_ERROR;
+}
+
+void BpBinder::sendObituary()
+{
+    AutoMutex _l(mLock);
+    mAlive = 0;
+    if (mObituaries.empty()) return;
+    for (auto&amp; obituary : mObituaries) {
+        sp&lt;DeathRecipient&gt; recipient = obituary.recipient.promote();
+        if (recipient != nullptr) {
+            recipient-&gt;binderDied(wp&lt;IBinder&gt;::fromExisting(this));
+        }
+    }
+    mObituaries.clear();
+}
+</code></pre></div>
+<p><code>IPCThreadState::executeCommand</code> 里：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">    case BR_DEAD_BINDER: {
+        BpBinder* proxy = (BpBinder*)mIn.readPointer();
+        proxy-&gt;sendObituary();
+        mOut.writeInt32(BC_DEAD_BINDER_DONE);
+        mOut.writePointer((uintptr_t)proxy);
+    } break;
+</code></pre></div>
+<p><strong>关键：<code>binderDied()</code> 是在 Binder 线程里回调的！</strong> 这意味着：</p>
+<ul>
+<li>回调里可以做轻量清理，<strong>不能做耗时操作</strong>（会阻塞这个 Binder 线程）。</li>
+<li>在 Java 里，<code>BinderProxy.linkToDeath</code> 的回调也可能不在主线程。</li>
+</ul>
+<h3 id="section-2-4-java-侧代码">2.4 Java 侧代码</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// 客户端
+IBinder.DeathRecipient recipient = new IBinder.DeathRecipient() {
+    @Override
+    public void binderDied() {
+        Log.w(TAG, &quot;service died!&quot;);
+        // 清理 / 重连
+    }
+};
+
+try {
+    binder.linkToDeath(recipient, 0);
+} catch (RemoteException e) {
+    // 服务在 linkToDeath 之前就已经死了
+}
+
+// 不需要时
+binder.unlinkToDeath(recipient, 0);
+</code></pre></div>
+<p>JNI 里用 <code>JavaDeathRecipient</code> 包装 Java 的 <code>DeathRecipient</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/base/core/jni/android_util_Binder.cpp
+class JavaDeathRecipient : public IBinder::DeathRecipient {
+    jobject mObject;      /* Java 的 DeathRecipient 对象 */
+    // ...
+    void binderDied(const wp&lt;IBinder&gt;&amp; who) override {
+        // 先做 Java 侧的生命周期处理，再回调 DeathRecipient.binderDied()
+        ...
+    }
+};
+</code></pre></div>
+<blockquote>
+<p><strong>Android 11 的优化</strong>：为了减少 native 层死亡通知的数量（每个都占资源），Java 侧的 <code>BinderProxy</code> 改成「一个进程只注册一个 native 的死亡接收器」，然后在 Java 层用 <code>mDeathRecipients</code> 列表分发。这样 N 个接收器只产生 1 次内核注册。</p>
+</blockquote>
+<h3 id="section-2-5-常见坑">2.5 常见坑</h3>
+<ol>
+<li><strong>忘记 <code>unlinkToDeath</code></strong> → <code>BpBinder</code> 被 <code>mObituaries</code> 里的 <code>sp&lt;DeathRecipient&gt;</code> 持有 → 内存泄漏。</li>
+<li><strong><code>proxy</code> 传 <code>nullptr</code></strong> → <code>binderDied()</code> 里访问 <code>proxy</code> 会 NPE。</li>
+<li><strong><code>linkToDeath</code> 之前服务已经死了</strong> → 抛 <code>RemoteException</code>，必须 <code>try/catch</code> 并检查 <code>isBinderAlive()</code>。</li>
+<li><strong>oneway + linkToDeath</strong> → oneway 调用失败不会抛异常，只能靠死亡通知发现。</li>
+</ol>
+<hr>
+<h2 id="section-3-oneway-的排队机制-深入">3. oneway 的排队机制（深入）</h2>
+<p>回顾 <code>binder_proc_transaction</code> 的 oneway 分支：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">	if (oneway) {
+		if (node-&gt;has_async_transaction) {
+			/* ★ 该 node 已有异步事务在处理，排队 */
+			binder_enqueue_work_ilocked(&amp;t-&gt;work, &amp;node-&gt;async_todo);
+			t-&gt;flags |= TF_UPDATE_TXN? ...
+		} else {
+			node-&gt;has_async_transaction = 1;
+			thread = binder_select_thread_ilocked(proc);
+			binder_enqueue_thread_work(thread, &amp;t-&gt;work);
+		}
+	}
+</code></pre></div>
+<p><strong>关键结论</strong>：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>场景</th>
+<th>是否有序</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>同一个 node 上的连续 oneway 事务</td>
+<td>✅ 串行、有序</td>
+</tr>
+<tr>
+<td>不同 node 上的 oneway 事务</td>
+<td>❌ 无顺序保证</td>
+</tr>
+<tr>
+<td>oneway 和同步调用之间</td>
+<td>❌ 无顺序保证</td>
+</tr>
+<tr>
+<td>多个线程同时发 oneway 给同一 node</td>
+<td>✅ 在内核排队，仍串行</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-3-1-为什么-oneway-只能用一半缓冲区">3.1 为什么 oneway 只能用一半缓冲区</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">/* binder_alloc_mmap_handler 或 new_buf 时 */
+alloc-&gt;free_async_space = alloc-&gt;buffer_size / 2;
+</code></pre></div>
+<p>目的是<strong>防止 oneway 洪水把同步调用的空间全占了</strong>，导致系统服务无法响应。超了会返回 <code>FAILED_TRANSACTION</code>。</p>
+<h3 id="section-3-2-oneway-spam">3.2 &quot;oneway spam&quot;</h3>
+<p>Android 12+ 引入了 <strong>oneway spam 检测</strong>：如果某个 node 短时间内被大量 oneway 事务淹没，内核会打日志并拒绝一部分。</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">	if (oneway_spam_detected) {
+		binder_user_error(&quot;%d:%d got transaction ... oneway spam\n&quot;, ...);
+	}
+</code></pre></div>
+<hr>
+<h2 id="section-4-binder-线程池">4. Binder 线程池</h2>
+<h3 id="section-4-1-初始化">4.1 初始化</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/ProcessState.cpp
+void ProcessState::startThreadPool()
+{
+    AutoMutex _l(mLock);
+    if (!mThreadPoolStarted) {
+        mThreadPoolStarted = true;
+        spawnPooledThread(true);      /* ★ isMain = true */
+    }
+}
+</code></pre></div>
+<p>应用进程在 <code>zygoteInit()</code> 里调用（<code>AndroidRuntime::onZygoteInit()</code>）：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">void AndroidRuntime::onZygoteInit()
+{
+    sp&lt;ProcessState&gt; proc = ProcessState::self();
+    proc-&gt;startThreadPool();     /* ★ 每个 app 进程从这里开始有 Binder 线程 */
+}
+</code></pre></div>
+<p><code>spawnPooledThread(true)</code> 会<strong>新建一个线程</strong>（<code>PoolThread</code>），不是复用主线程：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">status_t ProcessState::spawnPooledThread(bool isMain)
+{
+    if (mThreadPoolStarted) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), &quot;Binder:%d_%d&quot;, ...);
+        sp&lt;Thread&gt; t = new PoolThread(isMain);
+        t-&gt;run(buf);      /* 新建线程，名字形如 Binder:1234_1 */
+    }
+    return NO_ERROR;
+}
+</code></pre></div>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// PoolThread 的 threadLoop
+bool ProcessState::PoolThread::threadLoop() {
+    /* ★ 进入内核循环，永远不返回 */
+    IPCThreadState::self()-&gt;joinThreadPool(mIsMain);
+    return false;
+}
+</code></pre></div>
+<h3 id="section-4-2-jointhreadpool-binder-线程的主循环">4.2 <code>joinThreadPool</code>：Binder 线程的主循环</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">void IPCThreadState::joinThreadPool(bool isMain)
+{
+    /* 告诉内核：我是主线程 (BC_ENTER_LOOPER) 还是池线程 (BC_REGISTER_LOOPER) */
+    mOut.writeInt32(isMain ? BC_ENTER_LOOPER : BC_REGISTER_LOOPER);
+
+    status_t result;
+    do {
+        processPendingDerefs();
+        /* ★ 核心循环：取一个命令并执行 */
+        result = getAndExecuteCommand();
+    } while (result != -ECONNREFUSED &amp;&amp; result != -EBADF);
+
+    mOut.writeInt32(BC_EXIT_LOOPER);
+    talkWithDriver(false);
+}
+</code></pre></div>
+<p><code>getAndExecuteCommand()</code> → <code>talkWithDriver()</code> → 读到 <code>BR_*</code> → <code>executeCommand()</code>。<strong>这个循环就是 Binder 线程的全部工作</strong>：阻塞在 <code>ioctl</code>，被唤醒、处理、再阻塞。</p>
+<h3 id="section-4-3-线程池如何按需扩充-br-spawn-looper">4.3 线程池如何按需扩充：<code>BR_SPAWN_LOOPER</code></h3>
+<p>内核发现「有事务但没空闲线程」时，会发起新线程：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">/* drivers/android/binder.c — binder_thread_read() */
+		if (proc-&gt;requested_threads == 0 &amp;&amp;
+		    list_empty(&amp;proc-&gt;waiting_threads) &amp;&amp;
+		    proc-&gt;requested_threads_started &lt; proc-&gt;max_threads &amp;&amp;
+		    (thread-&gt;looper &amp; (BINDER_LOOPER_STATE_REGISTERED |
+		                       BINDER_LOOPER_STATE_ENTERED))) {
+			proc-&gt;requested_threads++;
+			/*
+			 * 在返回流里插入 BR_SPAWN_LOOPER
+			 */
+			cmd = BR_SPAWN_LOOPER;
+		}
+</code></pre></div>
+<p>用户态收到后：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">    case BR_SPAWN_LOOPER:
+        mProcess-&gt;spawnPooledThread(false);    /* ★ 新建一个 PoolThread */
+        break;
+</code></pre></div>
+<p><img src="/images/binder/06-3.png" alt="4.3 线程池如何按需扩充：BR_SPAWN_LOOPER（图 3）"></p>
+<h3 id="section-4-4-线程池上限">4.4 线程池上限</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">#define DEFAULT_MAX_BINDER_THREADS 15
+</code></pre></div>
+<ul>
+<li><code>ProcessState::setThreadPoolMaxThreadCount(n)</code> → <code>ioctl(BINDER_SET_MAX_THREADS, &amp;n)</code></li>
+<li><code>servicemanager</code> 显式设为 <code>0</code>（它不需要线程池，只用主线程）</li>
+<li><code>system_server</code> 一般保持默认（15）</li>
+<li>默认 <code>15</code> 之外还有 1 个「主 Binder 线程」，所以实际最多 ~16 个</li>
+</ul>
+<h3 id="section-4-5-经典死锁-binder-线程池耗尽">4.5 经典死锁：Binder 线程池耗尽</h3>
+<p><img src="/images/binder/06-4.png" alt="4.5 经典死锁：Binder 线程池耗尽（图 4）"></p>
+<p><strong>规律</strong>：只要形成「A 等 B、B 等 A」的循环，且双方线程都被占满，就死锁。</p>
+<p><strong>避免方法</strong>：</p>
+<ul>
+<li>不要用同步调用形成环（尤其 A→B→A）。</li>
+<li>耗时操作不要放在 Binder 线程里。</li>
+<li>必要时用 oneway 打断环。</li>
+<li>关键服务提高线程池上限。</li>
+</ul>
+<hr>
+<h2 id="section-5-selinux-安全上下文-android-10">5. SELinux 安全上下文（Android 10+）</h2>
+<h3 id="section-5-1-背景">5.1 背景</h3>
+<p>服务端有时需要知道「调用我的这个进程的 SELinux 域是什么」，用于细粒度权限判断。</p>
+<p><strong>Android 10 之前</strong>：读 <code>/proc/&lt;pid&gt;/attr/current</code>。问题：有 TOCTOU 竞态 —— 你读到 pid 时，进程可能已经 exec 成别的程序了。</p>
+<p><strong>Android 10 起</strong>：内核在创建 <code>binder_proc</code> 时缓存 secctx，随事务下发。</p>
+<h3 id="section-5-2-数据结构与命令">5.2 数据结构与命令</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_transaction_data_secctx {
+	struct binder_transaction_data transaction_data;
+	binder_uintptr_t               secctx;    /* &quot;u:r:untrusted_app:s0:c123,c456&quot; */
+};
+</code></pre></div>
+<p>新增命令：<code>BR_TRANSACTION_SEC_CTX</code>。</p>
+<p>用户态：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// IPCThreadState::executeCommand()
+case BR_TRANSACTION_SEC_CTX:
+case BR_TRANSACTION:
+{
+    binder_transaction_data_secctx tr_secctx;
+    binder_transaction_data&amp; tr = tr_secctx.transaction_data;
+    if (cmd == (int) BR_TRANSACTION_SEC_CTX) {
+        mIn.read(&amp;tr_secctx, sizeof(tr_secctx));
+    } else {
+        mIn.read(&amp;tr, sizeof(tr));
+        tr_secctx.secctx = 0;
+    }
+    /* tr_secctx.secctx 指向安全上下文字符串 */
+    ...
+}
+</code></pre></div>
+<h3 id="section-5-3-native-侧读取">5.3 native 侧读取</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// IPCThreadState::getCallingSid()
+const char* IPCThreadState::getCallingSid() const {
+    return mCallingSid;
+}
+
+// Parcel::read 后可以拿到
+</code></pre></div>
+<p>Java 侧：<code>Binder.getCallingSid()</code>（Android 10+ 添加，隐藏 API）。</p>
+<blockquote>
+<p>相关：Java 侧还有 <code>Binder.getCallingPid()</code> / <code>Binder.getCallingUid()</code>，它们读的是 <code>IPCThreadState</code> 的 <code>mCallingPid</code>/<code>mCallingUid</code>，这两个值由 <code>BR_TRANSACTION</code> 里的 <code>sender_pid</code>/<code>sender_euid</code> <strong>内核填充</strong>，无法伪造。</p>
+</blockquote>
+<hr>
+<h2 id="section-6-文件描述符传递">6. 文件描述符传递</h2>
+<p>Binder 可以在事务里传 <code>fd</code>（这是它比很多 IPC 强的地方）。</p>
+<h3 id="section-6-1-编码">6.1 编码</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">Parcel::writeFileDescriptor(int fd, bool takeOwnership)
+// 写入 flat_binder_object{ type = BINDER_TYPE_FD, handle = fd }
+</code></pre></div>
+<h3 id="section-6-2-内核翻译">6.2 内核翻译</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">static int binder_translate_fd(u32 fd, ...)
+{
+	/* ① 从发送方的 fd 表里取出 struct file */
+	struct file *file = fget(fd);
+	...
+	/* ② 在目标进程的 fd 表里安装一个新的 fd */
+	target_fd = task_get_unused_fd_flags(target_proc, O_CLOEXEC);
+	fd_install(target_fd, file);
+	...
+}
+</code></pre></div>
+<p><strong>关键</strong>：fd 是<strong>被复制</strong>的，不是「移动」。发送方仍然持有自己的 fd。</p>
+<h3 id="section-6-3-java-侧的-fd">6.3 Java 侧的 fd</h3>
+<p>Java 层用 <code>ParcelFileDescriptor</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// 发送
+ParcelFileDescriptor pfd = ParcelFileDescriptor.fromFd(fd);
+parcel.writeFileDescriptor(pfd.getFileDescriptor());
+
+// 接收
+ParcelFileDescriptor received = parcel.readFileDescriptor();
+</code></pre></div>
+<p>底层会用到 <code>BINDER_TYPE_FDA</code>（fd 数组）批量传 fd。</p>
+<h3 id="section-6-4-权限">6.4 权限</h3>
+<p>发送方需要对目标进程有 <code>TF_ACCEPT_FDS</code>（接收方在 <code>transact</code> 时需要带这个 flag，<code>libbinder</code> 会自动加）。</p>
+<hr>
+<h2 id="section-7-大小限制与-transactiontoolargeexception">7. 大小限制与 <code>TransactionTooLargeException</code></h2>
+<h3 id="section-7-1-三层限制">7.1 三层限制</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>限制</th>
+<th>后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>进程总缓冲区</td>
+<td><code>1MB - 8KB</code></td>
+<td>超过 → <code>FAILED_TRANSACTION</code></td>
+</tr>
+<tr>
+<td>单个同步事务</td>
+<td>受目标进程剩余空间限制</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>oneway 事务</td>
+<td>最多 <code>buffer_size / 2</code></td>
+<td>同上</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-7-2-异常的产生链">7.2 异常的产生链</h3>
+<p><img src="/images/binder/06-5.png" alt="7.2 异常的产生链（图 5）"></p>
+<p>JNI 里的转换：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/base/core/jni/android_util_Binder.cpp
+static void signalExceptionForError(JNIEnv* env, jobject obj, status_t err,
+                                    bool canThrowRemoteException, int parcelSize)
+{
+    switch (err) {
+    case DEAD_OBJECT:
+        jniThrowException(env, &quot;android/os/DeadObjectException&quot;, NULL);
+        break;
+    case FAILED_TRANSACTION:
+        ALOGE(&quot;!!! FAILED BINDER TRANSACTION !!!  (parcel size = %d)&quot;, parcelSize);
+        /* ★ 转成 TransactionTooLargeException */
+        exceptionToThrow = canThrowRemoteException
+                ? &quot;android/os/TransactionTooLargeException&quot;
+                : &quot;java/lang/RuntimeException&quot;;
+        snprintf(msg, sizeof(msg), &quot;data parcel size %d bytes&quot;, parcelSize);
+        jniThrowException(env, exceptionToThrow, msg);
+        break;
+    case NO_ERROR: break;
+    // ...
+    }
+}
+</code></pre></div>
+<h3 id="section-7-3-为什么-明明没到-1mb-也报错">7.3 为什么「明明没到 1MB 也报错」</h3>
+<p>常见原因：</p>
+<ol>
+<li><strong>目标进程的缓冲区被别的事务占用了</strong> —— 限制是「剩余空间」，不是「1MB」。</li>
+<li><strong>同时有多个事务在飞</strong> —— 每个都占一块。</li>
+<li><strong>oneway 只能用一半</strong> —— 实际阈值是 ~508KB。</li>
+<li><strong>位图/Bitmap</strong>：<code>Bundle</code> 里放 <code>Bitmap</code> 会走 <code>Parcelable</code> 序列化，实际大小可能远超预期。</li>
+<li><strong>String 是 UTF-16</strong> —— 一个中文字符 = 2 字节。</li>
+</ol>
+<p><strong>经验值</strong>：跨进程传数据<strong>最好不要超过几十 KB</strong>。大文件/大数据用 <code>ashmem</code> / <code>ParcelFileDescriptor</code> / <code>BinderType.PTR</code>（scatter-gather）。</p>
+<hr>
+<h2 id="section-8-嵌套调用与-transaction-stack">8. 嵌套调用与 <code>transaction_stack</code></h2>
+<h3 id="section-8-1-允许的嵌套">8.1 允许的嵌套</h3>
+<p>Binder 线程处理 <code>BR_TRANSACTION</code> 时，<strong>可以再发起同步调用</strong>（这叫嵌套/重入）。内核用 <code>binder_thread.transaction_stack</code> 记录调用链：</p>
+<p><img src="/images/binder/06-6.png" alt="8.1 允许的嵌套（图 6）"></p>
+<p>T2 在等服务 C 时，<code>transaction_stack</code> 上压着「正在为 A 处理事务」。</p>
+<h3 id="section-8-2-循环-死锁">8.2 循环 → 死锁</h3>
+<p><img src="/images/binder/06-7.png" alt="8.2 循环 → 死锁（图 7）"></p>
+<p>如果 A 已经<strong>没有空闲线程</strong>了，B 的调用就没人处理 → 双方永久阻塞。</p>
+<p><strong>注意</strong>：内核有个保护 —— 如果检测到「A→B→A 且是同一个线程栈」，会直接返回 <code>BR_DEAD_REPLY</code>（防止自我死锁）。但<strong>跨线程</strong>的循环无法检测，只能靠 <code>BR_SPAWN_LOOPER</code> 开新线程救场（前提是没到 <code>max_threads</code>）。</p>
+<hr>
+<h2 id="section-9-常见坑汇总">9. 常见坑汇总</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>坑</th>
+<th>症状</th>
+<th>原因</th>
+<th>解法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TransactionTooLargeException</code></td>
+<td>调用直接抛异常</td>
+<td>Parcel 太大 / 目标缓冲区满</td>
+<td>减小数据、分片、用 ashmem</td>
+</tr>
+<tr>
+<td>Binder 线程池耗尽</td>
+<td>随机 ANR / 卡死</td>
+<td>所有线程都在等一个慢调用</td>
+<td>检查耗时操作是否在 Binder 线程里；避免调用环</td>
+</tr>
+<tr>
+<td><code>DeadObjectException</code></td>
+<td>调用抛异常</td>
+<td>服务进程死了</td>
+<td><code>linkToDeath</code> + 重连</td>
+</tr>
+<tr>
+<td><code>RemoteException</code> 在 <code>oneway</code> 调用中丢失</td>
+<td>静默失败</td>
+<td>oneway 无法回传异常</td>
+<td>用死亡通知或加一个回调接口</td>
+</tr>
+<tr>
+<td>内存泄漏</td>
+<td>服务端引用客户端不释放</td>
+<td>注册回调后忘记注销</td>
+<td><code>unregisterCallback</code> + <code>unlinkToDeath</code></td>
+</tr>
+<tr>
+<td><code>SecurityException</code> at <code>enforceInterface</code></td>
+<td>接口不匹配</td>
+<td>AIDL 改了但客户端没重编</td>
+<td>重新编译；或用 <code>@VintfStability</code></td>
+</tr>
+<tr>
+<td>Parcel 读错位</td>
+<td>数据错乱 / 崩溃</td>
+<td>读写顺序不一致</td>
+<td>严格按 AIDL 生成代码的顺序</td>
+</tr>
+<tr>
+<td>同进程调用行为不同</td>
+<td>异常类型/线程不同</td>
+<td><code>asInterface</code> 走了本地路径</td>
+<td>测试时用真实的跨进程场景</td>
+</tr>
+<tr>
+<td><code>oneway</code> 调用丢失顺序预期</td>
+<td>顺序错乱</td>
+<td>oneway 只在同一 node 上有序</td>
+<td>需要顺序就用同步调用</td>
+</tr>
+<tr>
+<td>在 Binder 线程里做 IO</td>
+<td>卡住整个服务</td>
+<td>Binder 线程数是有限的</td>
+<td>切到自己的线程池</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-10-与其它-ipc-的对比">10. 与其它 IPC 的对比</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Binder</th>
+<th>Socket</th>
+<th>共享内存</th>
+<th>管道/消息队列</th>
+<th>AIDL over Binder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>拷贝次数</td>
+<td><strong>1</strong></td>
+<td>2</td>
+<td>0（但要自己同步）</td>
+<td>2</td>
+<td>1</td>
+</tr>
+<tr>
+<td>面向对象</td>
+<td>✅</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>身份识别</td>
+<td>✅ 内核提供 pid/uid</td>
+<td>需 SO_PEERCRED</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>权限模型</td>
+<td>SELinux + uid</td>
+<td>端口/文件权限</td>
+<td>文件权限</td>
+<td>文件权限</td>
+<td>SELinux</td>
+</tr>
+<tr>
+<td>线程模型</td>
+<td>内核管理线程池</td>
+<td>自己管</td>
+<td>自己管</td>
+<td>自己管</td>
+<td>内核管理</td>
+</tr>
+<tr>
+<td>传 fd</td>
+<td>✅</td>
+<td>✅ (SCM_RIGHTS)</td>
+<td>✅</td>
+<td>❌</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>适合</td>
+<td>控制面/小数据</td>
+<td>通用/网络</td>
+<td>大数据/零拷贝</td>
+<td>简单流</td>
+<td>系统服务</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>结论</strong>：Binder 适合<strong>控制面的小数据 RPC</strong>（方法调用、参数传递）。<strong>大数据</strong>（音视频帧、位图）应该用 <code>ashmem</code> / <code>ParcelFileDescriptor</code> / <code>Surface</code>，Binder 只传「句柄」。</p>
+<hr>
+<p>下一章：<a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/"><code>07-源码索引与调试.md</code></a> —— 去读源码、去调试验证。</p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/07-源码索引与调试/"><small>上一篇</small><strong>Android Binder 07：源码索引与调试</strong></a><a href="/2026/11/11/05-完整消息流转/"><small>下一篇</small><strong>Android Binder 05：完整消息流转</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-1-引用计数与对象生命周期" title="1. 引用计数与对象生命周期">1. 引用计数与对象生命周期</a></li><li class="toc-level-3"><a href="#section-1-1-五个计数" title="1.1 五个计数">1.1 五个计数</a></li><li class="toc-level-3"><a href="#section-1-2-强引用-vs-弱引用" title="1.2 强引用 vs 弱引用">1.2 强引用 vs 弱引用</a></li><li class="toc-level-3"><a href="#section-1-3-反向通知-br-acquire-br-release" title="1.3 反向通知：BR_ACQUIRE / BR_RELEASE">1.3 反向通知：BR_ACQUIRE / BR_RELEASE</a></li><li class="toc-level-3"><a href="#section-1-4-对象死亡的两个层次" title="1.4 对象死亡的两个层次">1.4 对象死亡的两个层次</a></li><li class="toc-level-2"><a href="#section-2-死亡通知-death-notification" title="2. 死亡通知（Death Notification）">2. 死亡通知（Death Notification）</a></li><li class="toc-level-3"><a href="#section-2-1-时序" title="2.1 时序">2.1 时序</a></li><li class="toc-level-3"><a href="#section-2-2-内核里的数据结构" title="2.2 内核里的数据结构">2.2 内核里的数据结构</a></li><li class="toc-level-3"><a href="#section-2-3-native-侧代码" title="2.3 native 侧代码">2.3 native 侧代码</a></li><li class="toc-level-3"><a href="#section-2-4-java-侧代码" title="2.4 Java 侧代码">2.4 Java 侧代码</a></li><li class="toc-level-3"><a href="#section-2-5-常见坑" title="2.5 常见坑">2.5 常见坑</a></li><li class="toc-level-2"><a href="#section-3-oneway-的排队机制-深入" title="3. oneway 的排队机制（深入）">3. oneway 的排队机制（深入）</a></li><li class="toc-level-3"><a href="#section-3-1-为什么-oneway-只能用一半缓冲区" title="3.1 为什么 oneway 只能用一半缓冲区">3.1 为什么 oneway 只能用一半缓冲区</a></li><li class="toc-level-3"><a href="#section-3-2-oneway-spam" title="3.2 &quot;oneway spam&quot;">3.2 &quot;oneway spam&quot;</a></li><li class="toc-level-2"><a href="#section-4-binder-线程池" title="4. Binder 线程池">4. Binder 线程池</a></li><li class="toc-level-3"><a href="#section-4-1-初始化" title="4.1 初始化">4.1 初始化</a></li><li class="toc-level-3"><a href="#section-4-2-jointhreadpool-binder-线程的主循环" title="4.2 joinThreadPool：Binder 线程的主循环">4.2 joinThreadPool：Binder 线程的主循环</a></li><li class="toc-level-3"><a href="#section-4-3-线程池如何按需扩充-br-spawn-looper" title="4.3 线程池如何按需扩充：BR_SPAWN_LOOPER">4.3 线程池如何按需扩充：BR_SPAWN_LOOPER</a></li><li class="toc-level-3"><a href="#section-4-4-线程池上限" title="4.4 线程池上限">4.4 线程池上限</a></li><li class="toc-level-3"><a href="#section-4-5-经典死锁-binder-线程池耗尽" title="4.5 经典死锁：Binder 线程池耗尽">4.5 经典死锁：Binder 线程池耗尽</a></li><li class="toc-level-2"><a href="#section-5-selinux-安全上下文-android-10" title="5. SELinux 安全上下文（Android 10+）">5. SELinux 安全上下文（Android 10+）</a></li><li class="toc-level-3"><a href="#section-5-1-背景" title="5.1 背景">5.1 背景</a></li><li class="toc-level-3"><a href="#section-5-2-数据结构与命令" title="5.2 数据结构与命令">5.2 数据结构与命令</a></li><li class="toc-level-3"><a href="#section-5-3-native-侧读取" title="5.3 native 侧读取">5.3 native 侧读取</a></li><li class="toc-level-2"><a href="#section-6-文件描述符传递" title="6. 文件描述符传递">6. 文件描述符传递</a></li><li class="toc-level-3"><a href="#section-6-1-编码" title="6.1 编码">6.1 编码</a></li><li class="toc-level-3"><a href="#section-6-2-内核翻译" title="6.2 内核翻译">6.2 内核翻译</a></li><li class="toc-level-3"><a href="#section-6-3-java-侧的-fd" title="6.3 Java 侧的 fd">6.3 Java 侧的 fd</a></li><li class="toc-level-3"><a href="#section-6-4-权限" title="6.4 权限">6.4 权限</a></li><li class="toc-level-2"><a href="#section-7-大小限制与-transactiontoolargeexception" title="7. 大小限制与 TransactionTooLargeException">7. 大小限制与 TransactionTooLargeException</a></li><li class="toc-level-3"><a href="#section-7-1-三层限制" title="7.1 三层限制">7.1 三层限制</a></li><li class="toc-level-3"><a href="#section-7-2-异常的产生链" title="7.2 异常的产生链">7.2 异常的产生链</a></li><li class="toc-level-3"><a href="#section-7-3-为什么-明明没到-1mb-也报错" title="7.3 为什么「明明没到 1MB 也报错」">7.3 为什么「明明没到 1MB 也报错」</a></li><li class="toc-level-2"><a href="#section-8-嵌套调用与-transaction-stack" title="8. 嵌套调用与 transaction_stack">8. 嵌套调用与 transaction_stack</a></li><li class="toc-level-3"><a href="#section-8-1-允许的嵌套" title="8.1 允许的嵌套">8.1 允许的嵌套</a></li><li class="toc-level-3"><a href="#section-8-2-循环-死锁" title="8.2 循环 → 死锁">8.2 循环 → 死锁</a></li><li class="toc-level-2"><a href="#section-9-常见坑汇总" title="9. 常见坑汇总">9. 常见坑汇总</a></li><li class="toc-level-2"><a href="#section-10-与其它-ipc-的对比" title="10. 与其它 IPC 的对比">10. 与其它 IPC 的对比</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

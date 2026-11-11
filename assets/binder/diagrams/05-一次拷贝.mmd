@@ -1,0 +1,22 @@
+%% Binder 的"一次拷贝"：缓冲区分配在接收方进程
+flowchart LR
+    subgraph SENDER["发送方进程"]
+        SU["用户态 Parcel 数据<br/>tr.data.ptr.buffer"]
+    end
+
+    subgraph KERNEL["内核"]
+        KB["binder_alloc_copy_user_to_buffer()<br/>kmap 目标页 + copy_from_user"]
+    end
+
+    subgraph TARGET["接收方进程"]
+        TP["Binder 缓冲区物理页<br/>(1MB - 8KB 里的某几页)"]
+        TU["用户态 mmap 区<br/>同一批物理页, PROT_READ"]
+    end
+
+    SU -->|"① 唯一的用户态到内核拷贝"| KB
+    KB -->|"② 直接写入"| TP
+    TP ---|"同一批物理页"| TU
+    TU -->|"③ 读取零拷贝"| RD["Server 的 Parcel<br/>ipcSetDataReference()"]
+
+    style KB fill:#ffe9c7
+    style TP fill:#ffcc99

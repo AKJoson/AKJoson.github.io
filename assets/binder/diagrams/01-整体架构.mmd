@@ -1,0 +1,34 @@
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TB
+    subgraph L1["① Java 框架层 (frameworks/base/core/java)"]
+        A1["android.os.IBinder / Binder / BinderProxy"]
+        A2["android.os.Parcel"]
+        A3["android.os.ServiceManager"]
+        A4["AIDL 生成的 Stub / Proxy"]
+    end
+
+    subgraph JNI["② JNI 胶水层 (frameworks/base/core/jni)"]
+        C1["android_util_Binder.cpp → JavaBBinder"]
+        C2["android_os_Parcel.cpp"]
+    end
+
+    subgraph L2["③ Native 库层 (frameworks/native/libs/binder)"]
+        B1["IPCThreadState — 每线程一个, 负责 ioctl"]
+        B2["ProcessState — 每进程一个, 负责 mmap 和线程池"]
+        B3["BpBinder / BBinder — 代理 / 实体"]
+        B4["Parcel (native)"]
+    end
+
+    subgraph L4["④ 内核驱动层 (drivers/android/binder.c, binder_alloc.c)"]
+        D1["binder_ioctl"]
+        D2["binder_transaction"]
+        D3["binder_alloc 内存分配器"]
+    end
+
+    L1 --> JNI --> L2
+    L2 -->|"ioctl(fd, BINDER_WRITE_READ)"| L4
+
+    style L4 fill:#ffe9c7
+    style L2 fill:#d8ecff
+    style L1 fill:#e2f7d8
+    style JNI fill:#f0e2ff

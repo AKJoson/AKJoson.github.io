@@ -1,0 +1,32 @@
+%% 一个 Binder 对象从创建到被远程调用的完整对象模型
+flowchart TB
+    subgraph SP["Server 进程 (例: system_server)"]
+        IM["MyServiceImpl<br/>extends IMyService.Stub"]
+        STUB["IMyService.Stub<br/>extends android.os.Binder"]
+        JB["JavaBBinder (native)<br/>extends BBinder"]
+        IM --> STUB
+        STUB -->|"JNI 绑定"| JB
+    end
+
+    subgraph K["内核 Binder 驱动"]
+        NODE["binder_node<br/>ptr = &BBinder<br/>cookie = JavaBBinderHolder*"]
+    end
+
+    subgraph SM["ServiceManager 进程"]
+        SMR["handle 0<br/>binder_context_mgr_node"]
+    end
+
+    subgraph CP["Client 进程"]
+        PX["IMyService.Stub.Proxy"]
+        BP2["BinderProxy (Java)"]
+        BPB["BpBinder (native)<br/>mHandle = 42"]
+        PX -->|"持有 mRemote"| BP2
+        BP2 --> BPB
+    end
+
+    JB -.->|"内核为它建 node"| NODE
+    NODE -.->|"内核为 Client 建 ref<br/>desc = 42"| BPB
+    SM -.->|"名字 → handle"| BP2
+
+    style K fill:#ffe9c7
+    style NODE fill:#ffcc99

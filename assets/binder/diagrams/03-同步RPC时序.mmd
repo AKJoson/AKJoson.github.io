@@ -1,0 +1,53 @@
+%% 一次同步 RPC 的端到端时序
+sequenceDiagram
+    autonumber
+    participant App as App 代码
+    participant PX as Stub.Proxy (Java)
+    participant BP as BinderProxy (Java) / BpBinder (native)
+    participant ITC as IPCThreadState [Client 调用线程]
+    participant K as Binder 驱动 (内核)
+    participant ITS as IPCThreadState [Server Binder 线程]
+    participant JB as JavaBBinder (BBinder)
+    participant ST as Stub (Java)
+
+    Note over App,ITC: ── Client 进程 ──
+    App->>PX: echo("hi")
+    PX->>PX: Parcel.obtain() x2
+    PX->>PX: writeInterfaceToken(DESCRIPTOR) + writeString("hi")
+    PX->>BP: transact(code=1, _data, _reply, flags=0)
+    BP->>ITC: IPCThreadState::transact(mHandle=42, 1, _data, _reply, 0)
+    ITC->>ITC: writeTransactionData(BC_TRANSACTION, 0, 42, 1, _data)
+    ITC->>K: ioctl(BINDER_WRITE_READ) write_buffer = mOut
+
+    Note over K: ── 内核 ──
+    K->>K: binder_thread_write -> binder_transaction()
+    K->>K: refs_by_desc[42] -> binder_ref -> binder_node
+    K->>K: binder_alloc_new_buf(target_proc->alloc)
+    K->>K: binder_alloc_copy_user_to_buffer() 一次拷贝
+    K->>K: 翻译 flat_binder_object / fd
+    K->>K: binder_proc_transaction() 挂到 Server 线程 todo
+    K-->>ITC: BR_TRANSACTION_COMPLETE 请求已接收
+    K->>K: wake_up_interruptible_sync()
+
+    Note over ITS,ST: ── Server 进程 ──
+    K->>ITS: 唤醒, ioctl 返回 BR_TRANSACTION
+    ITS->>ITS: executeCommand(BR_TRANSACTION)
+    ITS->>ITS: Parcel 指向自己的 mmap 区 (0 拷贝)
+    ITS->>JB: target->transact(code=1, buffer, &reply, 0)
+    JB->>ST: JavaBBinder::onTransact -> JNI execTransact
+    ST->>ST: enforceInterface + readString + 调用实现
+    ST->>ST: writeNoException + writeString("hi")
+    ST-->>JB: return true
+    JB-->>ITS: NO_ERROR
+    ITS->>K: ioctl BC_REPLY (target = t->from)
+    K-->>ITS: BR_TRANSACTION_COMPLETE
+    K->>ITC: 唤醒 Client 调用线程
+
+    Note over App,ITC: ── 回到 Client ──
+    K-->>ITC: BR_REPLY
+    ITC->>ITC: reply->ipcSetDataReference()
+    ITC->>ITC: freeBuffer() -> BC_FREE_BUFFER
+    ITC-->>BP: return NO_ERROR
+    BP-->>PX: return true
+    PX->>PX: readException() + readString()
+    PX-->>App: "hi"

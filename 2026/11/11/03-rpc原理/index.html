@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 03：RPC 原理 · 殷仔的博客</title><meta name="description" content="结合 AIDL 生成代码解释 Proxy、Stub、句柄、对象引用以及 transact/onTransact，理解远程调用如何实现。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 03：RPC 原理"><meta property="og:description" content="结合 AIDL 生成代码解释 Proxy、Stub、句柄、对象引用以及 transact/onTransact，理解远程调用如何实现。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 03：RPC 原理</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 24 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-1-rpc-的核心问题">1. RPC 的核心问题</a></li><li><a href="#section-2-关键抽象-ibinder">2. 关键抽象：IBinder</a></li><li><a href="#section-两个实现类">两个实现类</a></li><li><a href="#section-最重要的一张图-android-os-binder-transact-是本地直通">最重要的一张图：android.os.Binder.transact 是本地直通</a></li><li><a href="#section-3-句柄-handle-跨进程的-对象引用">3. 句柄（handle）：跨进程的「对象引用」</a></li><li><a href="#section-3-1-为什么需要句柄">3.1 为什么需要句柄</a></li><li><a href="#section-3-2-句柄的几个关键性质">3.2 句柄的几个关键性质</a></li><li><a href="#section-3-3-从代码看句柄的存在">3.3 从代码看句柄的存在</a></li><li><a href="#section-4-aidl-生成代码逐行解析">4. AIDL 生成代码逐行解析</a></li><li><a href="#section-4-1-生成的-java-文件-结构">4.1 生成的 Java 文件（结构）</a></li><li><a href="#section-4-2-调用链">4.2 调用链</a></li><li><a href="#section-4-3-querylocalinterface-的实现">4.3 queryLocalInterface 的实现</a></li><li><a href="#section-5-native-层-bpinterface-bninterface">5. Native 层：BpInterface / BnInterface</a></li><li><a href="#section-6-transact-ontransact-的语义契约">6. transact / onTransact 的语义契约</a></li><li><a href="#section-6-1-transact-code-data-reply-flags-调用方">6.1 transact(code, data, reply, flags)（调用方）</a></li><li><a href="#section-6-2-ontransact-code-data-reply-flags-被调用方">6.2 onTransact(code, data, reply, flags)（被调用方）</a></li><li><a href="#section-6-3-flags">6.3 flags</a></li><li><a href="#section-6-4-保留的-code">6.4 保留的 code</a></li><li><a href="#section-7-完整对象模型图">7. 完整对象模型图</a></li><li><a href="#section-一次-传递对象-的完整例子">一次「传递对象」的完整例子</a></li><li><a href="#section-8-为什么-binder-只能-一次同步调用-而不会死锁">8. 为什么 Binder 只能「一次同步调用」而不会死锁？</a></li><li><a href="#section-9-小结">9. 小结</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<p>这一章回答：<strong><code>remoteService.echo(&quot;hi&quot;)</code> 里的 <code>remoteService</code> 到底是什么？为什么写起来跟本地对象一样？</strong></p>
+<hr>
+<h2 id="section-1-rpc-的核心问题">1. RPC 的核心问题</h2>
+<p>远程调用和本地调用的根本差异：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// 本地调用：编译器帮你处理一切
+localService.echo(&quot;hi&quot;);
+// 编译后大致是： load localService 的地址; push &quot;hi&quot;; call echo; pop 返回值
+
+// 远程调用：localService 根本不在这个进程里！
+remoteService.echo(&quot;hi&quot;);
+// 编译器完全不知道该怎么办
+</code></pre></div>
+<p>RPC 的经典解法是 <strong>Proxy-Stub 模式（代理模式）</strong>：</p>
+<p><img src="/images/binder/03-1.png" alt="1. RPC 的核心问题（图 1）"></p>
+<ul>
+<li><strong>Proxy（代理）</strong>：给调用方看的假对象，接口和真实对象一模一样。它把参数序列化、发出去、等结果、反序列化。</li>
+<li><strong>Stub（桩）</strong>：服务端侧的骨架，接收消息、反序列化、调用真实实现、把结果序列化回去。</li>
+</ul>
+<p><strong>Binder 做的事情就是把这个模式自动化</strong>：你写一个 <code>.aidl</code> 文件，<code>aidl</code> 编译器帮你生成 Proxy 和 Stub 的全部代码。</p>
+<hr>
+<h2 id="section-2-关键抽象-ibinder">2. 关键抽象：<code>IBinder</code></h2>
+<p>Binder 里所有跨进程对象都实现同一个接口：<code>android.os.IBinder</code>（native 侧叫 <code>IBinder</code>）。</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// frameworks/base/core/java/android/os/IBinder.java
+public interface IBinder {
+    int FIRST_CALL_TRANSACTION  = 0x00000001;
+    int LAST_CALL_TRANSACTION   = 0x00ffffff;
+
+    int INTERFACE_TRANSACTION   = (&#39;_&#39;&lt;&lt;24)|(&#39;N&#39;&lt;&lt;16)|(&#39;T&#39;&lt;&lt;8)|&#39;F&#39;;
+    int DUMP_TRANSACTION        = (&#39;_&#39;&lt;&lt;24)|(&#39;D&#39;&lt;&lt;16)|(&#39;M&#39;&lt;&lt;8)|&#39;P&#39;;
+    int SHELL_COMMAND_TRANSACTION = (&#39;_&#39;&lt;&lt;24)|(&#39;C&#39;&lt;&lt;16)|(&#39;M&#39;&lt;&lt;8)|&#39;D&#39;;
+    int PING_TRANSACTION        = (&#39;_&#39;&lt;&lt;24)|(&#39;P&#39;&lt;&lt;16)|(&#39;N&#39;&lt;&lt;8)|&#39;G&#39;;
+    int TWEET_TRANSACTION       = (&#39;_&#39;&lt;&lt;24)|(&#39;T&#39;&lt;&lt;16)|(&#39;W&#39;&lt;&lt;8)|&#39;T&#39;;
+    int LIKE_TRANSACTION        = (&#39;_&#39;&lt;&lt;24)|(&#39;L&#39;&lt;&lt;16)|(&#39;I&#39;&lt;&lt;8)|&#39;K&#39;;
+
+    int FLAG_ONEWAY             = 0x00000001;
+
+    boolean transact(int code, Parcel data, Parcel reply, int flags) throws RemoteException;
+    IInterface queryLocalInterface(String descriptor);
+    boolean pingBinder();
+    boolean isBinderAlive();
+    void linkToDeath(DeathRecipient recipient, int flags);
+    boolean unlinkToDeath(DeathRecipient recipient, int flags);
+}
+</code></pre></div>
+<p><strong>关键点：<code>IBinder</code> 只有一个真正干活的方法 —— <code>transact</code>。</strong></p>
+<p>所有方法调用最终都变成 <code>transact(code, data, reply, flags)</code> 这一个调用。<code>code</code> 是方法号，<code>data</code>/<code>reply</code> 是 <code>Parcel</code>。这就是「面向对象 IPC」的全部秘密：<strong>用整数编号 + 序列化参数来表达任意方法调用</strong>。</p>
+<h3 id="section-两个实现类">两个实现类</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Java 类</th>
+<th>Native 类</th>
+<th>什么时候出现</th>
+<th><code>transact</code> 干什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>android.os.Binder</code></td>
+<td><code>BBinder</code></td>
+<td>服务端进程<strong>自己</strong>持有的那个对象</td>
+<td><strong>直接调 <code>onTransact</code></strong>（本地快路径）</td>
+</tr>
+<tr>
+<td><code>android.os.BinderProxy</code></td>
+<td><code>BpBinder</code></td>
+<td>客户端进程持有的<strong>代理</strong></td>
+<td>走 <code>IPCThreadState</code> → <code>ioctl</code> 内核</td>
+</tr>
+</tbody>
+</table></div>
+<p><img src="/images/binder/03-2.png" alt="两个实现类（图 2）"></p>
+<h3 id="section-最重要的一张图-android-os-binder-transact-是本地直通">最重要的一张图：<code>android.os.Binder.transact</code> 是本地直通</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// frameworks/base/core/java/android/os/Binder.java
+public final boolean transact(int code, Parcel data, Parcel reply, int flags)
+        throws RemoteException {
+    if (data != null) {
+        data.setDataPosition(0);
+    }
+    boolean r = onTransact(code, data, reply, flags);   // ← 没有 IPC！直接调用
+    if (reply != null) {
+        reply.setDataPosition(0);
+    }
+    return r;
+}
+</code></pre></div>
+<p><strong>这是 Binder 的一个精妙设计</strong>：<code>Binder</code>（本地对象）的 <code>transact</code> 就是 <code>onTransact</code>，<code>BinderProxy</code>（远程代理）的 <code>transact</code> 才走 IPC。</p>
+<p>这带来一个大好处：<strong>服务端代码可以同时用于「本地调用」和「跨进程调用」</strong>。同一份 <code>MyServiceImpl extends IMyService.Stub</code>，在本进程内被调用时零开销，跨进程时才付出 IPC 代价。</p>
+<hr>
+<h2 id="section-3-句柄-handle-跨进程的-对象引用">3. 句柄（handle）：跨进程的「对象引用」</h2>
+<h3 id="section-3-1-为什么需要句柄">3.1 为什么需要句柄</h3>
+<p>指针在进程间无效。Binder 的解法是：<strong>内核给每个进程维护一张「句柄表」，句柄是这张表的索引。</strong></p>
+<p><img src="/images/binder/03-3.png" alt="3.1 为什么需要句柄（图 3）"></p>
+<p><strong>三层对应关系</strong>：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层</th>
+<th>结构</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>客户端</td>
+<td><code>handle</code>（<code>uint32_t</code>）</td>
+<td>「索引」</td>
+</tr>
+<tr>
+<td>内核</td>
+<td><code>binder_ref</code>（<code>desc == handle</code>）</td>
+<td>「索引 → 实体」的映射</td>
+</tr>
+<tr>
+<td>内核</td>
+<td><code>binder_node</code>（<code>ptr</code> + <code>cookie</code>）</td>
+<td>「实体」</td>
+</tr>
+<tr>
+<td>服务端</td>
+<td><code>BBinder</code> 对象</td>
+<td>「实体」的用户态实现</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-3-2-句柄的几个关键性质">3.2 句柄的几个关键性质</h3>
+<p><strong>① 句柄是 per-process 的。</strong> 同一个 Binder 对象，在进程 A 里可能是 handle 42，在进程 B 里可能是 handle 7，在内核里是同一个 <code>binder_node</code>。</p>
+<p><strong>② 句柄 0 是特殊保留的</strong> —— 它永远指向 <code>ServiceManager</code>。内核在分配句柄时跳过 0：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">// drivers/android/binder.c — binder_get_ref_for_node_olocked()
+	new_ref-&gt;data.desc = (node == context-&gt;binder_context_mgr_node) ? 0 : 1;
+	for (n = rb_first(&amp;proc-&gt;refs_by_desc); n != NULL; n = rb_next(n)) {
+		ref = rb_entry(n, struct binder_ref, rb_node_desc);
+		if (ref-&gt;data.desc &gt; new_ref-&gt;data.desc)
+			break;
+		new_ref-&gt;data.desc = ref-&gt;data.desc + 1;
+	}
+	/* 于是新句柄总是&quot;最小的未使用正整数&quot; */
+</code></pre></div>
+<p><strong>③ 句柄是内核在第一次跨进程传输时创建的</strong>（懒分配）。你 <code>bindService</code> 或者 <code>getService</code> 拿到一个 <code>BinderProxy</code> 时，内核就已经为你的进程建好了对应的 <code>binder_ref</code>。</p>
+<p><strong>④ 句柄有引用计数</strong>（strong/weak），决定 <code>binder_ref</code> 和 <code>binder_node</code> 什么时候被销毁。详见 <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a>。</p>
+<h3 id="section-3-3-从代码看句柄的存在">3.3 从代码看句柄的存在</h3>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/BpBinder.h
+class BpBinder : public IBinder
+{
+public:
+    static sp&lt;BpBinder&gt; create(int32_t handle, ...);
+    inline int32_t handle() const { return mHandle; }
+    // ...
+private:
+    const int32_t mHandle;   // ← 句柄就存在这里
+    // ...
+};
+</code></pre></div>
+<p><code>BpBinder</code> 的全部「跨进程信息」只有这一个整数。它不知道对方在哪个进程、叫什么名字 —— 那都是内核的事。</p>
+<hr>
+<h2 id="section-4-aidl-生成代码逐行解析">4. AIDL 生成代码逐行解析</h2>
+<p>假设接口定义：</p>
+<div class="code-block"><div class="code-toolbar"><span>aidl</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-aidl">// com/example/IMyService.aidl
+package com.example;
+
+interface IMyService {
+    String echo(String s);
+}
+</code></pre></div>
+<h3 id="section-4-1-生成的-java-文件-结构">4.1 生成的 Java 文件（结构）</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">package com.example;
+
+public interface IMyService extends android.os.IInterface {
+
+  // ═══════════════════════════════════════════════════════
+  // Stub：服务端骨架（extends Binder —— 所以它是「本地实体」）
+  // ═══════════════════════════════════════════════════════
+  public static abstract class Stub extends android.os.Binder implements IMyService {
+
+    public static final java.lang.String DESCRIPTOR = &quot;com.example.IMyService&quot;;
+
+    public Stub() {
+      this.attachInterface(this, DESCRIPTOR);   // ① 把自己注册到 Binder 的接口表
+    }
+
+    // ② 客户端调用这个：把 IBinder 转成 IMyService
+    public static IMyService asInterface(android.os.IBinder obj) {
+      if (obj == null) return null;
+
+      // 先试着当本地对象用（同进程优化）
+      android.os.IInterface iin = obj.queryLocalInterface(DESCRIPTOR);
+      if (iin != null &amp;&amp; iin instanceof IMyService) {
+        return (IMyService) iin;                // 同进程：直接返回真实对象
+      }
+      // 跨进程：包一层 Proxy
+      return new IMyService.Stub.Proxy(obj);
+    }
+
+    @Override
+    public android.os.IBinder asBinder() { return this; }
+
+    // ③ 服务端入口：内核把 BR_TRANSACTION 送到这里
+    @Override
+    public boolean onTransact(int code, android.os.Parcel data,
+                              android.os.Parcel reply, int flags)
+            throws android.os.RemoteException {
+      java.lang.String descriptor = DESCRIPTOR;
+      switch (code) {
+        case INTERFACE_TRANSACTION: {          // 特殊 code：返回接口描述符
+          reply.writeString(descriptor);
+          return true;
+        }
+        case TRANSACTION_echo: {               // 业务方法
+          data.enforceInterface(descriptor);   // ④ 校验接口标识
+          java.lang.String _arg0;
+          _arg0 = data.readString();           // ⑤ 反序列化参数
+          java.lang.String _result = this.echo(_arg0);  // ⑥ 调用真实实现
+          reply.writeNoException();            // ⑦ 写&quot;没有异常&quot;
+          reply.writeString(_result);          // ⑧ 序列化返回值
+          return true;
+        }
+        default:
+          return super.onTransact(code, data, reply, flags);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Proxy：客户端代理
+    // ═══════════════════════════════════════════════════════
+    private static class Proxy implements IMyService {
+      private android.os.IBinder mRemote;      // ← 通常是 BinderProxy
+
+      Proxy(android.os.IBinder remote) { mRemote = remote; }
+
+      @Override public android.os.IBinder asBinder() { return mRemote; }
+
+      // ⑨ 调用方看到的接口方法
+      @Override
+      public java.lang.String echo(java.lang.String s) throws android.os.RemoteException {
+        android.os.Parcel _data  = android.os.Parcel.obtain();
+        android.os.Parcel _reply = android.os.Parcel.obtain();
+        java.lang.String _result;
+        try {
+          _data.writeInterfaceToken(DESCRIPTOR);       // 写接口标识
+          _data.writeString(s);                        // ⑩ 序列化参数
+          boolean _status = mRemote.transact(Stub.TRANSACTION_echo, _data, _reply, 0);
+          _reply.readException();                      // ⑪ 读&quot;有没有异常&quot;
+          _result = _reply.readString();               // ⑫ 反序列化返回值
+        } finally {
+          _reply.recycle();
+          _data.recycle();
+        }
+        return _result;
+      }
+    }
+
+    // 方法号：从 FIRST_CALL_TRANSACTION 开始递增
+    static final int TRANSACTION_echo = android.os.IBinder.FIRST_CALL_TRANSACTION + 0;
+  }
+}
+</code></pre></div>
+<h3 id="section-4-2-调用链">4.2 调用链</h3>
+<p><img src="/images/binder/03-4.png" alt="4.2 调用链（图 4）"></p>
+<p><strong>注意 <code>asInterface</code> 的分支</strong>：如果 Client 和 Server 在同一个进程（比如 <code>bindService</code> 到自己的进程，或者 <code>LocalService</code>），<code>queryLocalInterface</code> 会返回真实的 <code>Stub</code> 对象，于是<strong>根本不会创建 Proxy，也不会走 IPC</strong>。这就是 <code>04-消息封装.md</code> 里说的「本地快路径」。</p>
+<h3 id="section-4-3-querylocalinterface-的实现">4.3 <code>queryLocalInterface</code> 的实现</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// android.os.Binder
+public IInterface queryLocalInterface(String descriptor) {
+    if (mDescriptor != null &amp;&amp; mDescriptor.equals(descriptor)) {
+        return mOwner;      // 就是这个 Binder 自己（或它注册的 owner）
+    }
+    return null;
+}
+
+// android.os.BinderProxy
+public IInterface queryLocalInterface(String descriptor) {
+    return null;            // 代理永远不是&quot;本地对象&quot;
+}
+</code></pre></div>
+<p><code>attachInterface(owner, descriptor)</code> 就是把这个 Binder 和它的接口实现绑定起来。</p>
+<hr>
+<h2 id="section-5-native-层-bpinterface-bninterface">5. Native 层：<code>BpInterface</code> / <code>BnInterface</code></h2>
+<p>AIDL 的 native 后端（C++）生成的代码是同一个模式的 C++ 版本：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// 生成的 IMyService.h（简化）
+class IMyService : public IInterface {
+public:
+    DECLARE_META_INTERFACE(IMyService)          // 声明 asInterface / asBinder
+    virtual std::string echo(const std::string&amp; s) = 0;
+
+    enum : int32_t { TRANSACTION_echo = IBinder::FIRST_CALL_TRANSACTION };
+};
+
+// ── Bn 侧（对应 Java Stub）──
+class BnMyService : public BnInterface&lt;IMyService&gt; {
+public:
+    status_t onTransact(uint32_t code, const Parcel&amp; data, Parcel* reply,
+                        uint32_t flags = 0) override {
+        switch (code) {
+            case TRANSACTION_echo: {
+                data.checkInterface(this);                      // 等价于 enforceInterface
+                std::string _arg0 = data.readString();
+                std::string _result = echo(_arg0);              // 调用真实实现
+                reply-&gt;writeNoException();
+                reply-&gt;writeString(_result);
+                return NO_ERROR;
+            }
+            case IBinder::INTERFACE_TRANSACTION: {
+                reply-&gt;writeString(getInterfaceDescriptor());
+                return NO_ERROR;
+            }
+        }
+        return BBinder::onTransact(code, data, reply, flags);
+    }
+};
+
+// ── Bp 侧（对应 Java Proxy）──
+class BpMyService : public BpInterface&lt;IMyService&gt; {
+public:
+    explicit BpMyService(const sp&lt;IBinder&gt;&amp; impl) : BpInterface&lt;IMyService&gt;(impl) {}
+
+    std::string echo(const std::string&amp; s) override {
+        Parcel data, reply;
+        data.writeInterfaceToken(IMyService::getInterfaceDescriptor());
+        data.writeString(s);
+        status_t err = remote()-&gt;transact(TRANSACTION_echo, data, &amp;reply);
+        if (err != NO_ERROR) return {};
+        status_t exception = reply.readExceptionCode();
+        if (exception != OK) return {};
+        return reply.readString();
+    }
+};
+</code></pre></div>
+<p><code>BpInterface&lt;T&gt;</code> / <code>BnInterface&lt;T&gt;</code> 是 <code>libbinder</code> 提供的模板基类：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/include/binder/IInterface.h
+template&lt;typename INTERFACE&gt;
+class BpInterface : public INTERFACE, public BpRefBase {
+public:
+    explicit BpInterface(const sp&lt;IBinder&gt;&amp; remote) : BpRefBase(remote) {}
+protected:
+    IBinder* onAsBinder() override { return remote(); }   // remote() 返回 BpBinder
+};
+
+template&lt;typename INTERFACE&gt;
+class BnInterface : public INTERFACE, public BBinder {
+public:
+    sp&lt;IBinder&gt; asBinder() override { return this; }
+};
+</code></pre></div>
+<hr>
+<h2 id="section-6-transact-ontransact-的语义契约">6. <code>transact</code> / <code>onTransact</code> 的语义契约</h2>
+<p>这是 Binder 的「协议」，任何 Binder 实现都必须遵守：</p>
+<h3 id="section-6-1-transact-code-data-reply-flags-调用方">6.1 <code>transact(code, data, reply, flags)</code>（调用方）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>code</code></td>
+<td>方法号。<code>1 ~ 0x00FFFFFF</code> 是业务方法；<code>'_'</code> 开头的大数是<strong>系统保留</strong>的（<code>INTERFACE_TRANSACTION</code> 等）</td>
+</tr>
+<tr>
+<td><code>data</code></td>
+<td><strong>只读</strong>输入 <code>Parcel</code>，包含 <code>writeInterfaceToken</code> + 参数</td>
+</tr>
+<tr>
+<td><code>reply</code></td>
+<td><strong>输出</strong> <code>Parcel</code>。可以传 <code>null</code>（不需要返回值）</td>
+</tr>
+<tr>
+<td><code>flags</code></td>
+<td><code>0</code>（同步）或 <code>FLAG_ONEWAY</code>（异步）</td>
+</tr>
+<tr>
+<td>返回 <code>true</code></td>
+<td>事务已送达</td>
+</tr>
+<tr>
+<td>返回 <code>false</code></td>
+<td>事务未送达（如 oneway 且失败）</td>
+</tr>
+<tr>
+<td>抛 <code>RemoteException</code></td>
+<td>对端进程死亡 / 事务失败</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-6-2-ontransact-code-data-reply-flags-被调用方">6.2 <code>onTransact(code, data, reply, flags)</code>（被调用方）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>约定</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>返回 <code>true</code></td>
+<td>已处理（<strong>即使业务逻辑里抛了异常，也要返回 <code>true</code></strong>，异常信息通过 <code>writeException</code> 传回）</td>
+</tr>
+<tr>
+<td>返回 <code>false</code></td>
+<td>不认识的 <code>code</code>，会变成 <code>UNKNOWN_TRANSACTION</code>（<code>BR_FAILED_REPLY</code>）</td>
+</tr>
+<tr>
+<td>必须先 <code>enforceInterface</code></td>
+<td>校验调用方接口版本</td>
+</tr>
+<tr>
+<td>必须先 <code>writeNoException()</code></td>
+<td>写「无异常」标志，否则客户端 <code>readException()</code> 会读到垃圾</td>
+</tr>
+<tr>
+<td>参数<strong>只能按顺序读一次</strong></td>
+<td><code>Parcel</code> 是流式的，读错了就全错位</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-6-3-flags">6.3 flags</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">int FLAG_ONEWAY = 0x00000001;   // Java IBinder 里只有这一个
+</code></pre></div>
+<p>native 侧还有更多（见 <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><code>02-消息封装.md</code></a> 的 <code>transaction_flags</code>）。</p>
+<h3 id="section-6-4-保留的-code">6.4 保留的 <code>code</code></h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>code</th>
+<th>值</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FIRST_CALL_TRANSACTION</code></td>
+<td><code>0x00000001</code></td>
+<td>业务方法从这里开始编号</td>
+</tr>
+<tr>
+<td><code>LAST_CALL_TRANSACTION</code></td>
+<td><code>0x00FFFFFF</code></td>
+<td>业务方法编号上限</td>
+</tr>
+<tr>
+<td><code>INTERFACE_TRANSACTION</code></td>
+<td><code>0x5f4e5446</code>（<code>_NTF</code>）</td>
+<td>查询接口描述符</td>
+</tr>
+<tr>
+<td><code>DUMP_TRANSACTION</code></td>
+<td><code>0x5f444d50</code>（<code>_DMP</code>）</td>
+<td><code>dumpsys</code> 走这个</td>
+</tr>
+<tr>
+<td><code>PING_TRANSACTION</code></td>
+<td><code>0x5f504e47</code>（<code>_PNG</code>）</td>
+<td>存活探测</td>
+</tr>
+<tr>
+<td><code>SHELL_COMMAND_TRANSACTION</code></td>
+<td><code>0x5f434d44</code>（<code>_CMD</code>）</td>
+<td><code>cmd</code> 命令</td>
+</tr>
+<tr>
+<td><code>TWEET_TRANSACTION</code>/<code>LIKE_TRANSACTION</code></td>
+<td>—</td>
+<td>系统内部用于追踪 binder 调用链（Android 11+ profiling）</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>为什么用 <code>'_'</code> 开头的 ASCII 编码？</strong> 因为这些值超过 <code>LAST_CALL_TRANSACTION</code>，不可能和业务方法号冲突，同时肉眼可读（<code>_NTF</code> = iNterFace）。</p>
+</blockquote>
+<hr>
+<h2 id="section-7-完整对象模型图">7. 完整对象模型图</h2>
+<p>把「一个服务从创建到被调用」的全过程画出来：</p>
+<p><img src="/images/binder/03-5.png" alt="7. 完整对象模型图（图 5）"></p>
+<h3 id="section-一次-传递对象-的完整例子">一次「传递对象」的完整例子</h3>
+<p>A 在调用 B 时，把一个 C 服务的 Binder 作为参数传过去：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// A 进程
+bService.registerCallback(myCallback);   // myCallback 是 A 里实现的 IBinder
+</code></pre></div>
+<p><img src="/images/binder/03-6.png" alt="一次「传递对象」的完整例子（图 6）"></p>
+<p><strong>这就是「回调」和「双向通信」的实现原理</strong> —— 没有任何魔法，就是把 Binder 对象当参数序列化、内核翻译成句柄。</p>
+<hr>
+<h2 id="section-8-为什么-binder-只能-一次同步调用-而不会死锁">8. 为什么 Binder 只能「一次同步调用」而不会死锁？</h2>
+<p>Binder 的一个硬性约束：<strong>同一个 Binder 线程一次只能处理一个同步事务</strong>（但可以处理嵌套的<strong>回调</strong>）。</p>
+<ul>
+<li>线程 T 处理 <code>BR_TRANSACTION</code> 时，如果它再发起一个同步调用给别的服务，这个「新调用」会阻塞 T。</li>
+<li>如果对端也反过来调 T 所在的进程，内核会<strong>另起一个线程</strong>（<code>BR_SPAWN_LOOPER</code>）来处理，避免死锁。</li>
+<li>如果线程池满了（默认 15 + 1），就会出现经典的 <strong>Binder 线程池耗尽死锁</strong>：所有线程都在等对方，对方的回复没人处理。</li>
+</ul>
+<blockquote>
+<p>相关细节见 <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a> 的「Binder 线程池」。</p>
+</blockquote>
+<hr>
+<h2 id="section-9-小结">9. 小结</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Proxy</strong></td>
+<td>客户端侧的假对象，<code>transact</code> 走 IPC</td>
+</tr>
+<tr>
+<td><strong>Stub</strong></td>
+<td>服务端侧的骨架，<code>onTransact</code> 被 IPC 调用</td>
+</tr>
+<tr>
+<td><strong><code>IBinder.transact</code></strong></td>
+<td>RPC 的唯一原语：<code>(code, data, reply, flags)</code></td>
+</tr>
+<tr>
+<td><strong>句柄</strong></td>
+<td>内核发给客户端的整数索引，指向 <code>binder_ref</code></td>
+</tr>
+<tr>
+<td><strong><code>asInterface</code></strong></td>
+<td><code>IBinder</code> → 接口对象；同进程时返回真实对象（不吃 IPC 开销）</td>
+</tr>
+<tr>
+<td><strong>回调</strong></td>
+<td>就是把 Binder 对象当参数传过去，内核翻译成句柄</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<p>下一章：<a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a> —— 内核里到底存了什么，为什么只有一次拷贝。</p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/04-内核数据结构/"><small>上一篇</small><strong>Android Binder 04：内核数据结构</strong></a><a href="/2026/11/11/02-消息封装/"><small>下一篇</small><strong>Android Binder 02：消息封装</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-1-rpc-的核心问题" title="1. RPC 的核心问题">1. RPC 的核心问题</a></li><li class="toc-level-2"><a href="#section-2-关键抽象-ibinder" title="2. 关键抽象：IBinder">2. 关键抽象：IBinder</a></li><li class="toc-level-3"><a href="#section-两个实现类" title="两个实现类">两个实现类</a></li><li class="toc-level-3"><a href="#section-最重要的一张图-android-os-binder-transact-是本地直通" title="最重要的一张图：android.os.Binder.transact 是本地直通">最重要的一张图：android.os.Binder.transact 是本地直通</a></li><li class="toc-level-2"><a href="#section-3-句柄-handle-跨进程的-对象引用" title="3. 句柄（handle）：跨进程的「对象引用」">3. 句柄（handle）：跨进程的「对象引用」</a></li><li class="toc-level-3"><a href="#section-3-1-为什么需要句柄" title="3.1 为什么需要句柄">3.1 为什么需要句柄</a></li><li class="toc-level-3"><a href="#section-3-2-句柄的几个关键性质" title="3.2 句柄的几个关键性质">3.2 句柄的几个关键性质</a></li><li class="toc-level-3"><a href="#section-3-3-从代码看句柄的存在" title="3.3 从代码看句柄的存在">3.3 从代码看句柄的存在</a></li><li class="toc-level-2"><a href="#section-4-aidl-生成代码逐行解析" title="4. AIDL 生成代码逐行解析">4. AIDL 生成代码逐行解析</a></li><li class="toc-level-3"><a href="#section-4-1-生成的-java-文件-结构" title="4.1 生成的 Java 文件（结构）">4.1 生成的 Java 文件（结构）</a></li><li class="toc-level-3"><a href="#section-4-2-调用链" title="4.2 调用链">4.2 调用链</a></li><li class="toc-level-3"><a href="#section-4-3-querylocalinterface-的实现" title="4.3 queryLocalInterface 的实现">4.3 queryLocalInterface 的实现</a></li><li class="toc-level-2"><a href="#section-5-native-层-bpinterface-bninterface" title="5. Native 层：BpInterface / BnInterface">5. Native 层：BpInterface / BnInterface</a></li><li class="toc-level-2"><a href="#section-6-transact-ontransact-的语义契约" title="6. transact / onTransact 的语义契约">6. transact / onTransact 的语义契约</a></li><li class="toc-level-3"><a href="#section-6-1-transact-code-data-reply-flags-调用方" title="6.1 transact(code, data, reply, flags)（调用方）">6.1 transact(code, data, reply, flags)（调用方）</a></li><li class="toc-level-3"><a href="#section-6-2-ontransact-code-data-reply-flags-被调用方" title="6.2 onTransact(code, data, reply, flags)（被调用方）">6.2 onTransact(code, data, reply, flags)（被调用方）</a></li><li class="toc-level-3"><a href="#section-6-3-flags" title="6.3 flags">6.3 flags</a></li><li class="toc-level-3"><a href="#section-6-4-保留的-code" title="6.4 保留的 code">6.4 保留的 code</a></li><li class="toc-level-2"><a href="#section-7-完整对象模型图" title="7. 完整对象模型图">7. 完整对象模型图</a></li><li class="toc-level-3"><a href="#section-一次-传递对象-的完整例子" title="一次「传递对象」的完整例子">一次「传递对象」的完整例子</a></li><li class="toc-level-2"><a href="#section-8-为什么-binder-只能-一次同步调用-而不会死锁" title="8. 为什么 Binder 只能「一次同步调用」而不会死锁？">8. 为什么 Binder 只能「一次同步调用」而不会死锁？</a></li><li class="toc-level-2"><a href="#section-9-小结" title="9. 小结">9. 小结</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

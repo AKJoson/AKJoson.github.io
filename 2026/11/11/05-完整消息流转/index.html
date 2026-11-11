@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 05：完整消息流转 · 殷仔的博客</title><meta name="description" content="沿一次同步 RPC 的端到端 12 步追踪数据，并对照本地调用、oneway、回调以及服务注册与查询。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 05：完整消息流转"><meta property="og:description" content="沿一次同步 RPC 的端到端 12 步追踪数据，并对照本地调用、oneway、回调以及服务注册与查询。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 05：完整消息流转</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 35 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-0-前置条件-进程是怎么接入-binder-的">0. 前置条件：进程是怎么接入 Binder 的</a></li><li><a href="#section-1-端到端时序-一次同步调用">1. 端到端时序：一次同步调用</a></li><li><a href="#section-1-1-总览图">1.1 总览图</a></li><li><a href="#section-1-2-一步步拆解">1.2 一步步拆解</a></li><li><a href="#section-step-1-proxy-序列化参数-纯用户态-无内核参与">Step 1 — Proxy 序列化参数（纯用户态，无内核参与）</a></li><li><a href="#section-step-2-进入-binderproxy-transact">Step 2 — 进入 BinderProxy.transact</a></li><li><a href="#section-step-3-bpbinder-transact">Step 3 — BpBinder::transact</a></li><li><a href="#section-step-4-ipcthreadstate-transact-打包">Step 4 — IPCThreadState::transact 打包</a></li><li><a href="#section-step-5-talkwithdriver-唯一的一次系统调用">Step 5 — talkWithDriver：唯一的一次系统调用</a></li><li><a href="#section-step-6-内核-binder-transaction-找人-分配-拷贝">Step 6 — 内核 binder_transaction()：找人、分配、拷贝</a></li><li><a href="#section-step-7-binder-proc-transaction-选择目标线程并唤醒">Step 7 — binder_proc_transaction()：选择目标线程并唤醒</a></li><li><a href="#section-step-8-client-收到-br-transaction-complete-但还没返回">Step 8 — Client 收到 BR_TRANSACTION_COMPLETE（但还没返回！）</a></li><li><a href="#section-step-9-server-线程醒来-执行-br-transaction">Step 9 — Server 线程醒来，执行 BR_TRANSACTION</a></li><li><a href="#section-step-10-bbinder-transact-jni-java-stub-ontransact">Step 10 — BBinder::transact → JNI → Java Stub.onTransact</a></li><li><a href="#section-step-11-stub-执行真实逻辑-写-reply">Step 11 — Stub 执行真实逻辑，写 reply</a></li><li><a href="#section-step-12-sendreply-原路返回">Step 12 — sendReply 原路返回</a></li><li><a href="#section-2-同一进程内的调用-本地快路径">2. 同一进程内的调用（本地快路径）</a></li><li><a href="#section-3-oneway-调用">3. oneway 调用</a></li><li><a href="#section-3-1-差异点">3.1 差异点</a></li><li><a href="#section-3-2-时序图">3.2 时序图</a></li><li><a href="#section-3-3-oneway-的排队规则-binder-proc-transaction">3.3 oneway 的排队规则（binder_proc_transaction）</a></li><li><a href="#section-3-4-oneway-的常见坑">3.4 oneway 的常见坑</a></li><li><a href="#section-4-回调-反向-rpc">4. 回调（反向 RPC）</a></li><li><a href="#section-4-1-时序">4.1 时序</a></li><li><a href="#section-4-2-关键认知">4.2 关键认知</a></li><li><a href="#section-5-servicemanager-服务注册与查询">5. ServiceManager：服务注册与查询</a></li><li><a href="#section-5-1-servicemanager-自己怎么注册的">5.1 ServiceManager 自己怎么注册的</a></li><li><a href="#section-5-2-注册服务-addservice">5.2 注册服务（addService）</a></li><li><a href="#section-5-3-查询服务-getservice-checkservice">5.3 查询服务（getService / checkService）</a></li><li><a href="#section-5-4-java-侧的-servicemanager">5.4 Java 侧的 ServiceManager</a></li><li><a href="#section-6-完整的字节流转表">6. 完整的字节流转表</a></li><li><a href="#section-7-小结-三条主线">7. 小结：三条主线</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<p>前四章把零件拆开了，这一章把它们拼起来。<strong>这是整个文档最重要的部分。</strong></p>
+<hr>
+<h2 id="section-0-前置条件-进程是怎么接入-binder-的">0. 前置条件：进程是怎么接入 Binder 的</h2>
+<p>在能发起任何 Binder 调用之前，进程必须先初始化。这一步由 <code>ProcessState</code> 完成（<strong>每个进程一次</strong>，是单例）：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/ProcessState.cpp
+sp&lt;ProcessState&gt; ProcessState::self()
+{
+    return init(kDefaultDriver);   // 通常是 &quot;/dev/binder&quot;
+}
+
+sp&lt;ProcessState&gt; ProcessState::init(const char *driver)
+{
+    if (gProcess != nullptr) return gProcess;     // 单例
+
+    int fd = open(driver, O_RDWR | O_CLOEXEC);
+    // ...
+    gProcess = new ProcessState(driver);
+    return gProcess;
+}
+</code></pre></div>
+<p><code>ProcessState</code> 构造函数做的 4 件事：</p>
+<p><img src="/images/binder/05-1.png" alt="0. 前置条件：进程是怎么接入 Binder 的（图 1）"></p>
+<p>Java 侧同理：<code>android.os.ProcessState</code>（隐藏类）在 <code>android_util_Binder.cpp</code> 的 <code>register_android_os_Binder()</code> 里通过 JNI 拿到同一个 native <code>ProcessState</code> 单例。</p>
+<p><strong>每个线程</strong>则有自己的 <code>IPCThreadState</code>（线程局部存储）：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/IPCThreadState.cpp
+IPCThreadState* IPCThreadState::self()
+{
+    if (gHaveTLS) {
+restart:
+        const pthread_key_t k = gTLS;
+        IPCThreadState* st = (IPCThreadState*)pthread_getspecific(k);
+        if (st) return st;
+        return new IPCThreadState;    // 每个线程懒创建
+    }
+    // ...
+}
+
+IPCThreadState::IPCThreadState()
+    : mProcess(ProcessState::self()),
+      mInflightSynchronous(...), mServingStackPointer(nullptr)
+{
+    mIn.setDataCapacity(256);
+    mOut.setDataCapacity(256);
+    // ...
+}
+</code></pre></div>
+<p>所以：<strong>一个进程 = 1 个 <code>ProcessState</code> + N 个 <code>IPCThreadState</code>（每线程一个）</strong>。</p>
+<hr>
+<h2 id="section-1-端到端时序-一次同步调用">1. 端到端时序：一次同步调用</h2>
+<p>场景：Client 进程调用 Server 进程的 <code>IMyService.echo(&quot;hi&quot;)</code>。</p>
+<h3 id="section-1-1-总览图">1.1 总览图</h3>
+<p><img src="/images/binder/05-2.png" alt="1.1 总览图（图 2）"></p>
+<h3 id="section-1-2-一步步拆解">1.2 一步步拆解</h3>
+<h4 id="section-step-1-proxy-序列化参数-纯用户态-无内核参与">Step 1 — Proxy 序列化参数（纯用户态，无内核参与）</h4>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// IMyService.Stub.Proxy.echo()
+android.os.Parcel _data  = android.os.Parcel.obtain();   // 从对象池拿，避免 GC 压力
+android.os.Parcel _reply = android.os.Parcel.obtain();
+_data.writeInterfaceToken(DESCRIPTOR);   // 写 &quot;com.example.IMyService&quot;
+_data.writeString(&quot;hi&quot;);                 // 写参数
+</code></pre></div>
+<p>此时 <code>_data</code> 里的字节：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">偏移 0:  0x10         ← 长度 16 (字符数)
+偏移 4:  &quot;com.example.IMyService\0\0&quot;
+偏移 36: 0x02         ← 长度 2
+偏移 40: &#39;h&#39;,&#39;i&#39;
+偏移 44: 0x0000
+</code></pre></div>
+<blockquote>
+<p><code>Parcel.obtain()</code> 有一个每进程的池子（默认 6 个），避免频繁分配。</p>
+</blockquote>
+<h4 id="section-step-2-进入-binderproxy-transact">Step 2 — 进入 <code>BinderProxy.transact</code></h4>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">boolean _status = mRemote.transact(Stub.TRANSACTION_echo, _data, _reply, 0);
+</code></pre></div>
+<p><code>mRemote</code> 是 <code>BinderProxy</code>。<code>BinderProxy.transact</code> 是一个 native 方法：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// android.os.BinderProxy
+public native boolean transact(int code, Parcel data, Parcel reply, int flags)
+        throws RemoteException;
+</code></pre></div>
+<p>对应 JNI：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/base/core/jni/android_util_Binder.cpp
+static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
+        jint code, jobject dataObj, jobject replyObj, jint flags)
+{
+    Parcel* data  = parcelForJavaObject(env, dataObj);
+    Parcel* reply = parcelForJavaObject(env, replyObj);
+
+    IBinder* target = getBPBinderOrNull(env, obj);   // ← 拿到 BpBinder*
+    // ...
+    status_t err = target-&gt;transact(code, *data, reply, flags);
+    // ...
+    return err != NO_ERROR ? JNI_FALSE : JNI_TRUE;
+}
+</code></pre></div>
+<p><strong>Java <code>Parcel</code> 和 native <code>Parcel</code> 是同一个对象</strong>（JNI 里互相持有），所以这里没有数据拷贝。</p>
+<h4 id="section-step-3-bpbinder-transact">Step 3 — <code>BpBinder::transact</code></h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/BpBinder.cpp
+status_t BpBinder::transact(uint32_t code, const Parcel&amp; data,
+                            Parcel* reply, uint32_t flags)
+{
+    if (mAlive) {
+        status_t status = IPCThreadState::self()-&gt;transact(
+            mHandle, code, data, reply, flags);
+        if (status == DEAD_OBJECT) mAlive = 0;
+        return status;
+    }
+    return DEAD_OBJECT;
+}
+</code></pre></div>
+<p>一句话：<strong><code>BpBinder</code> 把活全交给当前线程的 <code>IPCThreadState</code>。</strong></p>
+<h4 id="section-step-4-ipcthreadstate-transact-打包">Step 4 — <code>IPCThreadState::transact</code> 打包</h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">status_t IPCThreadState::transact(int32_t handle, uint32_t code,
+        const Parcel&amp; data, Parcel* reply, uint32_t flags)
+{
+    flags |= TF_ACCEPT_FDS;   // 允许接收 fd
+
+    // 构造 binder_transaction_data 并写进 mOut
+    status_t err = writeTransactionData(BC_TRANSACTION, flags, handle, code,
+                                        data, nullptr);
+
+    if ((flags &amp; TF_ONE_WAY) == 0) {
+        // ═══ 同步：等待回复 ═══
+        if (reply) {
+            err = waitForResponse(reply);
+        } else {
+            Parcel fakeReply;
+            err = waitForResponse(&amp;fakeReply);
+        }
+    } else {
+        // ═══ oneway：只等 BR_TRANSACTION_COMPLETE ═══
+        err = waitForResponse(nullptr, nullptr);
+    }
+    return err;
+}
+</code></pre></div>
+<p><code>mOut</code> 内容：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">[uint32 BC_TRANSACTION] [struct binder_transaction_data]
+                          ├─ target.handle = 42
+                          ├─ code          = 1
+                          ├─ flags         = TF_ACCEPT_FDS
+                          ├─ data_size     = 48
+                          ├─ offsets_size  = 0
+                          ├─ data.ptr.buffer  ──→ (指向 _data 的负载)
+                          └─ data.ptr.offsets = 0
+</code></pre></div>
+<h4 id="section-step-5-talkwithdriver-唯一的一次系统调用">Step 5 — <code>talkWithDriver</code>：唯一的一次系统调用</h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">status_t IPCThreadState::talkWithDriver(bool doReceive)
+{
+    binder_write_read bwr;
+    bwr.write_size     = mOut.dataSize();
+    bwr.write_consumed = 0;
+    bwr.write_buffer   = (binder_uintptr_t)mOut.data();
+
+    bwr.read_size     = needRead ? mIn.dataCapacity() : 0;
+    bwr.read_consumed = 0;
+    bwr.read_buffer   = (binder_uintptr_t)mIn.data();
+
+    // ★ 唯一的系统调用
+    ioctl(mProcess-&gt;mDriverFD, BINDER_WRITE_READ, &amp;bwr);
+
+    // 处理后把 mOut 清空、把 mIn 的有效数据长度设好
+    ...
+}
+</code></pre></div>
+<p><strong>从这里离开用户态，进入内核。</strong></p>
+<h4 id="section-step-6-内核-binder-transaction-找人-分配-拷贝">Step 6 — 内核 <code>binder_transaction()</code>：找人、分配、拷贝</h4>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">// drivers/android/binder.c
+static void binder_transaction(struct binder_proc *proc,
+                               struct binder_thread *thread,
+                               struct binder_transaction_data *tr,
+                               int reply, binder_size_t extra_buffers_size)
+{
+    /* ① 找目标 */
+    if (!reply) {
+        e = binder_get_ref_for_node? // 实际：按 handle 查
+        ref = binder_get_ref_olocked(proc, tr-&gt;target.handle, true);
+        target_node = binder_get_node_refs_for_txn(ref-&gt;node, &amp;target_proc, &amp;return_error);
+        handle = ref-&gt;data.desc;
+    } else {
+        /* BC_REPLY：目标是发起方 */
+        target_node = t-&gt;buffer-&gt;target_node;   // 或 transaction 里的 from
+        target_proc = ...;
+        target_thread = ...;
+    }
+
+    /* ② 在【目标进程】的 alloc 里分配缓冲区 */
+    t-&gt;buffer = binder_alloc_new_buf(&amp;target_proc-&gt;alloc,
+                                     tr-&gt;data_size, tr-&gt;offsets_size,
+                                     extra_buffers_size,
+                                     !reply &amp;&amp; (t-&gt;flags &amp; TF_ONE_WAY));
+
+    /* ③ 拷贝数据（唯一一次用户态数据拷贝） */
+    binder_alloc_copy_user_to_buffer(&amp;target_proc-&gt;alloc, t-&gt;buffer,
+                                     ALIGN(secctx_sz, sizeof(u64)),
+                                     (const void __user *)(uintptr_t)tr-&gt;data.ptr.buffer,
+                                     tr-&gt;data_size);
+
+    /* ④ 翻译负载里的 flat_binder_object / fd */
+    offp = (binder_size_t *)(t-&gt;buffer-&gt;data + ALIGN(tr-&gt;data_size, sizeof(void *)));
+    for (size_t i = 0; i &lt; tr-&gt;offsets_size / sizeof(binder_size_t); i++, offp++) {
+        binder_object_header *hdr = (binder_object_header *)(t-&gt;buffer-&gt;data + *offp);
+        switch (hdr-&gt;type) {
+        case BINDER_TYPE_BINDER:
+        case BINDER_TYPE_WEAK_BINDER:
+            binder_translate_binder(...);    // 本地对象 → 对端 handle
+        case BINDER_TYPE_HANDLE:
+        case BINDER_TYPE_WEAK_HANDLE:
+            binder_translate_handle(...);    // 句柄 → 对端新句柄
+        case BINDER_TYPE_FD:
+            binder_translate_fd(...);        // fd → 对端新 fd
+        }
+    }
+
+    /* ⑤ 投递 */
+    binder_proc_transaction(t, target_proc, thread, oneway);
+}
+</code></pre></div>
+<h4 id="section-step-7-binder-proc-transaction-选择目标线程并唤醒">Step 7 — <code>binder_proc_transaction()</code>：选择目标线程并唤醒</h4>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">static bool binder_proc_transaction(struct binder_transaction *t,
+                                    struct binder_proc *proc,
+                                    struct binder_thread *thread,
+                                    bool oneway)
+{
+    struct binder_node *node = t-&gt;buffer-&gt;target_node;
+
+    if (oneway) {
+        /* oneway 的排队逻辑见 06 章 */
+        ...
+    }
+
+    if (thread) {
+        binder_enqueue_thread_work(thread, tcomplete);  /* 给发送者 BR_TRANSACTION_COMPLETE */
+        binder_enqueue_thread_work(thread, &amp;t-&gt;work);   /* 真正的任务 */
+        wake_up_interruptible_sync(&amp;thread-&gt;wait);
+        return true;
+    }
+
+    /* 没有可用线程 → 挂进程队列，并要求开新线程 */
+    binder_enqueue_work_ilocked(&amp;t-&gt;work, &amp;proc-&gt;todo);
+    binder_wakeup_proc_ilocked(proc);
+    return true;
+}
+</code></pre></div>
+<p><strong>注意</strong>：同步事务会优先选一个已经「空闲等待」的线程（<code>binder_select_thread_ilocked</code>），这样就能立刻被唤醒处理。</p>
+<h4 id="section-step-8-client-收到-br-transaction-complete-但还没返回">Step 8 — Client 收到 <code>BR_TRANSACTION_COMPLETE</code>（但还没返回！）</h4>
+<p>回到 <code>waitForResponse</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
+{
+    while (1) {
+        talkWithDriver();
+        if (mIn.dataAvail() == 0) continue;
+
+        uint32_t cmd = mIn.readInt32();
+        switch (cmd) {
+        case BR_TRANSACTION_COMPLETE:
+            if (!reply &amp;&amp; !acquireResult) goto finish;  // oneway：可以返回了
+            break;                                       // 同步：继续循环等 BR_REPLY
+        case BR_DEAD_REPLY:  err = DEAD_OBJECT;     goto finish;
+        case BR_FAILED_REPLY: err = FAILED_TRANSACTION; goto finish;
+        case BR_REPLY: {
+            binder_transaction_data tr;
+            mIn.read(&amp;tr, sizeof(tr));
+            if (reply) {
+                reply-&gt;ipcSetDataReference(
+                    reinterpret_cast&lt;const uint8_t*&gt;(tr.data.ptr.buffer),
+                    tr.data_size,
+                    reinterpret_cast&lt;const binder_size_t*&gt;(tr.data.ptr.offsets),
+                    tr.offsets_size / sizeof(binder_size_t),
+                    freeBuffer, this);
+            }
+            goto finish;   // 拿到结果，跳出循环
+        }
+        default:
+            executeCommand(cmd);   // 包括 BR_TRANSACTION
+        }
+    }
+finish:
+    ...
+}
+</code></pre></div>
+<p><strong>关键点</strong>：<code>BR_TRANSACTION_COMPLETE</code> 只是「内核已接收」的确认，对同步调用来说<strong>必须继续等 <code>BR_REPLY</code></strong>。这也解释了一个常见现象：<strong>oneway 调用虽然不等结果，但仍然要等内核确认</strong>，所以并非完全「发射后不管」。</p>
+<h4 id="section-step-9-server-线程醒来-执行-br-transaction">Step 9 — Server 线程醒来，执行 <code>BR_TRANSACTION</code></h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">status_t IPCThreadState::executeCommand(int32_t cmd)
+{
+    switch (cmd) {
+    case BR_TRANSACTION:
+    case BR_TRANSACTION_SEC_CTX: {
+        binder_transaction_data_secctx tr_secctx;
+        binder_transaction_data&amp; tr = tr_secctx.transaction_data;
+        if (cmd == BR_TRANSACTION_SEC_CTX) mIn.read(&amp;tr_secctx, sizeof(tr_secctx));
+        else { mIn.read(&amp;tr, sizeof(tr)); tr_secctx.secctx = 0; }
+
+        Parcel buffer;
+        /* ★ 0 拷贝：Parcel 直接指向内核写好的那块 mmap 内存 */
+        buffer.ipcSetDataReference(
+            reinterpret_cast&lt;const uint8_t*&gt;(tr.data.ptr.buffer),
+            tr.data_size,
+            reinterpret_cast&lt;const binder_size_t*&gt;(tr.data.ptr.offsets),
+            tr.offsets_size / sizeof(binder_size_t),
+            freeBuffer, this);
+
+        Parcel reply;
+        status_t error;
+
+        /* ★ 目标分派：靠 tr.target.ptr 是不是 0 来区分两种情况 */
+        if (tr.target.ptr) {
+            /* 情况 A：目标是一个&quot;本地 Binder 对象&quot;（绝大多数情况）。
+             * 内核把 binder_node 的 ptr 和 cookie 传了回来：
+             *   tr.target.ptr = node-&gt;ptr    （BBinder 的 weakref 地址）
+             *   tr.cookie     = node-&gt;cookie （BBinder 自己的地址）
+             * 注意：这里只持有弱引用，必须先用 attemptIncStrong() 安全地拿到强引用，
+             *       否则对象可能在这期间被销毁。
+             */
+            if (reinterpret_cast&lt;RefBase::weakref_type*&gt;(tr.target.ptr)-&gt;attemptIncStrong(this)) {
+                error = reinterpret_cast&lt;BBinder*&gt;(tr.cookie)-&gt;transact(tr.code, buffer, &amp;reply, tr.flags);
+                reinterpret_cast&lt;BBinder*&gt;(tr.cookie)-&gt;decStrong(this);
+            } else {
+                error = UNKNOWN_TRANSACTION;
+            }
+        } else {
+            /* 情况 B：tr.target.ptr == 0。
+             * 只有 ServiceManager 会走到这里 —— 它的 binder_node 是内核用
+             * binder_new_node(proc, 0, 0) 建的&quot;哑节点&quot;，ptr 和 cookie 都是 0。
+             * the_context_object 是 ServiceManager 自己注册进去的 Binder 对象。
+             */
+            error = the_context_object-&gt;transact(tr.code, buffer, &amp;reply, tr.flags);
+        }
+
+        if ((tr.flags &amp; TF_ONE_WAY) == 0) {
+            sendReply(reply, 0);          /* ★ 非 oneway 才回复 */
+        }
+        // buffer 由 freeBuffer 回调通过 BC_FREE_BUFFER 归还
+        break;
+    }
+    }
+}
+</code></pre></div>
+<blockquote>
+<p><strong>两个必须记住的点</strong>：</p>
+<ol>
+<li><code>tr.target.ptr</code> / <code>tr.cookie</code> 是<strong>内核</strong>在给接收方构造 <code>BR_TRANSACTION</code> 时填的（<code>binder_thread_read()</code> 里 <code>tr.target.ptr = target_node-&gt;ptr; tr.cookie = target_node-&gt;cookie;</code>）。<strong>发送方发出请求时这两个字段是 0</strong> —— 发送方只能填 <code>target.handle</code>。</li>
+<li>走到情况 A 时，<code>tr.cookie</code> 就是一个 <code>BBinder*</code>。对 Java 进程来说它指向 <code>JavaBBinder</code>，所以 <code>BBinder::transact</code> 最终会通过 JNI 调到 Java 的 <code>Binder.execTransact</code>。</li>
+</ol>
+</blockquote>
+<h4 id="section-step-10-bbinder-transact-jni-java-stub-ontransact">Step 10 — <code>BBinder::transact</code> → JNI → Java <code>Stub.onTransact</code></h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// libbinder/BBinder.cpp
+status_t BBinder::transact(uint32_t code, const Parcel&amp; data,
+                           Parcel* reply, uint32_t flags)
+{
+    switch (code) {
+    case PING_TRANSACTION: reply-&gt;writeInt32(pingBinder()); return NO_ERROR;
+    default:
+        err = onTransact(code, data, reply, flags);   // ← 虚函数，多态
+        break;
+    }
+    // ...
+    return err;
+}
+</code></pre></div>
+<p><code>onTransact</code> 被 <code>JavaBBinder</code> 覆写：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/base/core/jni/android_util_Binder.cpp
+class JavaBBinder : public BBinder {
+    jint onTransact(uint32_t code, const Parcel&amp; data, Parcel* reply, uint32_t flags) override {
+        // ...
+        jboolean res = env-&gt;CallBooleanMethod(
+            mObject,                       /* Java 的 Binder 对象 */
+            gBinderOffsets.mExecTransact,  /* Binder.execTransact */
+            code, (jlong)&amp;data, (jlong)reply, flags);
+        // ...
+        return res ? NO_ERROR : UNKNOWN_TRANSACTION;
+    }
+};
+</code></pre></div>
+<p>Java 侧：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// android.os.Binder
+private boolean execTransact(int code, long dataObj, long replyObj, int flags) {
+    Parcel data = Parcel.obtain(dataObj);
+    Parcel reply = Parcel.obtain(replyObj);
+    boolean res;
+    try {
+        res = onTransact(code, data, reply, flags);   // ← 最终到达 Stub.onTransact
+    } catch (RemoteException|RuntimeException e) {
+        ...
+    }
+    // ...
+    return res;
+}
+</code></pre></div>
+<h4 id="section-step-11-stub-执行真实逻辑-写-reply">Step 11 — Stub 执行真实逻辑，写 reply</h4>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// IMyService.Stub.onTransact
+case TRANSACTION_echo: {
+    data.enforceInterface(descriptor);
+    String _arg0 = data.readString();       // &quot;hi&quot;
+    String _result = this.echo(_arg0);      // ← 调用 MyServiceImpl.echo
+    reply.writeNoException();               // 写 0 (无异常)
+    reply.writeString(_result);             // 写返回值
+    return true;
+}
+</code></pre></div>
+<p><code>reply</code> <code>Parcel</code> 现在包含：<code>[int32 0 (NO_ERROR)][String16 长度][UTF-16 数据]</code>。</p>
+<h4 id="section-step-12-sendreply-原路返回">Step 12 — <code>sendReply</code> 原路返回</h4>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">status_t IPCThreadState::sendReply(const Parcel&amp; reply, uint32_t flags)
+{
+    status_t err = writeTransactionData(BC_REPLY, flags, 0, 0, reply, &amp;statusBuffer);
+    if (err != NO_ERROR) return err;
+    return waitForResponse(nullptr, nullptr);   // 等服务 BR_TRANSACTION_COMPLETE
+}
+</code></pre></div>
+<p>注意 <code>sendReply</code> 传的 <code>handle</code> 是 <strong>0</strong> —— <strong>回复的目标不由 <code>tr.target</code> 决定</strong>。内核收到 <code>BC_REPLY</code> 时，会从<strong>发起回复的那个线程</strong>的 <code>transaction_stack</code> 栈顶取出 <code>t-&gt;from</code>，也就是<strong>原来发起调用的那个线程</strong>，把结果送回给它。这也是为什么 <code>transaction_stack</code> 必须正确维护（见 <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a> 第 8 节）。</p>
+<p>Client 侧 <code>waitForResponse</code> 里的 <code>BR_REPLY</code> 分支被触发，<code>talkWithDriver</code> 返回，<code>BpBinder::transact</code> 返回 <code>NO_ERROR</code>，Proxy 读出结果：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">_reply.readException();       // 读 0，无异常
+_result = _reply.readString(); // 读 &quot;hi&quot;
+</code></pre></div>
+<p><strong>RPC 完成。</strong></p>
+<hr>
+<h2 id="section-2-同一进程内的调用-本地快路径">2. 同一进程内的调用（本地快路径）</h2>
+<p>如果 Client 和 Server 在同一个进程：</p>
+<p><img src="/images/binder/05-3.png" alt="2. 同一进程内的调用（本地快路径）（图 3）"></p>
+<p>这是 <code>bindService</code> 到同一进程、或者 <code>LocalService</code> 场景的优化。<strong>代码路径完全一样，只是 <code>Proxy</code> 被省略了</strong>，因此没有序列化开销（但仍要走一次 <code>Parcel</code> 写入，因为 <code>onTransact</code> 的签名就是这样）。</p>
+<hr>
+<h2 id="section-3-oneway-调用">3. oneway 调用</h2>
+<p><code>oneway</code> 表示「发出即忘」。AIDL 里加 <code>oneway</code> 关键字，或者手动传 <code>FLAG_ONEWAY</code>。</p>
+<h3 id="section-3-1-差异点">3.1 差异点</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>同步调用</th>
+<th>oneway 调用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flags</code></td>
+<td><code>0</code></td>
+<td><code>TF_ONE_WAY</code></td>
+</tr>
+<tr>
+<td>是否阻塞</td>
+<td>阻塞直到 <code>BR_REPLY</code></td>
+<td>只等 <code>BR_TRANSACTION_COMPLETE</code> 就返回</td>
+</tr>
+<tr>
+<td><code>reply</code></td>
+<td>有效</td>
+<td><strong>必须为 null</strong>（AIDL 会检查）</td>
+</tr>
+<tr>
+<td>抛异常</td>
+<td>通过 reply 传回</td>
+<td>无法传回</td>
+</tr>
+<tr>
+<td>内核缓冲</td>
+<td>目标线程 todo</td>
+<td>可能排到 <code>node-&gt;async_todo</code></td>
+</tr>
+<tr>
+<td>并发</td>
+<td>一个线程一个事务</td>
+<td>同一 node 的 oneway 事务<strong>串行</strong></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-3-2-时序图">3.2 时序图</h3>
+<p><img src="/images/binder/05-4.png" alt="3.2 时序图（图 4）"></p>
+<h3 id="section-3-3-oneway-的排队规则-binder-proc-transaction">3.3 oneway 的排队规则（<code>binder_proc_transaction</code>）</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">    if (oneway) {
+        if (node-&gt;has_async_transaction) {
+            /* ★ 该 node 已经有异步事务在处理 → 排队等 */
+            binder_enqueue_work_ilocked(&amp;t-&gt;work, &amp;node-&gt;async_todo);
+            ...
+        } else {
+            /* 没有 → 立刻派给一个线程，并标记 has_async_transaction */
+            node-&gt;has_async_transaction = 1;
+            thread = binder_select_thread_ilocked(proc);
+            binder_enqueue_thread_work(thread, &amp;t-&gt;work);
+        }
+    }
+</code></pre></div>
+<p><strong>保证</strong>：同一个 node 上的 oneway 事务<strong>按顺序串行执行</strong>（不会并发）。但<strong>不同 node</strong> 之间、或者<strong>同一 node 的 oneway + 同步调用</strong>之间没有顺序保证。</p>
+<h3 id="section-3-4-oneway-的常见坑">3.4 oneway 的常见坑</h3>
+<ol>
+<li><strong>不能靠 oneway 保证吞吐</strong> —— 由于串行化，oneway 在单服务上是「异步排队」，不是「并发执行」。</li>
+<li><strong>oneway 会占用接收方的缓冲区空间</strong>（最多一半的 <code>free_async_space</code>），大量 oneway 会报 <code>FAILED_TRANSACTION</code>。</li>
+<li><strong>AIDL 里 <code>oneway</code> 接口不能有返回值</strong>，也不能声明 <code>throws</code>（编译期检查）。</li>
+</ol>
+<hr>
+<h2 id="section-4-回调-反向-rpc">4. 回调（反向 RPC）</h2>
+<p>回调就是<strong>把 Binder 对象当参数传过去</strong>。看一个例子：</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// Client 侧
+IMyCallback cb = new IMyCallback.Stub() {
+    @Override public void onEvent(String msg) { Log.d(TAG, msg); }
+};
+myService.registerCallback(cb);   // ★ cb 是个 Binder 对象，作为参数传出
+</code></pre></div>
+<h3 id="section-4-1-时序">4.1 时序</h3>
+<p><img src="/images/binder/05-5.png" alt="4.1 时序（图 5）"></p>
+<h3 id="section-4-2-关键认知">4.2 关键认知</h3>
+<ul>
+<li><strong>回调方和被回调方角色互换</strong>，但走的还是同一套机制。</li>
+<li><strong>Server 拿到的 <code>handle=17</code> 只在 Server 进程内有效</strong>。</li>
+<li>回调是很多「死锁」和「泄漏」的根源：
+<ul>
+<li>Client 不 <code>unregisterCallback</code> → Server 持有对 Client 的引用 → Client 的 Binder 对象无法回收。</li>
+<li>用死亡通知（<code>linkToDeath</code>）可以清理这些引用。</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="section-5-servicemanager-服务注册与查询">5. ServiceManager：服务注册与查询</h2>
+<p><code>ServiceManager</code> 是特殊的，因为<strong>它的 handle 固定为 0</strong>。</p>
+<h3 id="section-5-1-servicemanager-自己怎么注册的">5.1 ServiceManager 自己怎么注册的</h3>
+<p><code>servicemanager</code> 进程启动时：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/cmds/servicemanager/main.cpp
+int main(int argc, char** argv) {
+    // ...
+    sp&lt;ProcessState&gt; ps(ProcessState::self());
+    ps-&gt;setThreadPoolMaxThreadCount(0);          // 不需要线程池
+    ps-&gt;setCallRestriction(ProcessState::CallRestriction::FATAL_ON_ILLEGAL_CALLS);
+    // ★ 注册为 context manager
+    status_t ret = ps-&gt;becomeContextManager(nullptr, nullptr);
+    // ...
+    IPCThreadState::self()-&gt;joinThreadPool();
+    return 0;
+}
+</code></pre></div>
+<p><code>becomeContextManager</code> → <code>ioctl(fd, BINDER_SET_CONTEXT_MGR, 0)</code>。<strong>内核只允许一个进程成功</strong>：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">// drivers/android/binder.c — binder_ioctl_set_ctx_mgr()
+	if (context-&gt;binder_context_mgr_node) {
+		ret = -EBUSY;      /* ★ 已经有 context manager 了 */
+		goto err;
+	}
+	/* 为该进程创建一个 binder_node，并记录到 context 里 */
+	context-&gt;binder_context_mgr_node = binder_new_node(proc, 0, 0);
+	/* 这个 node 的句柄在&quot;别人&quot;的进程里就是 0 */
+</code></pre></div>
+<p>于是<strong>所有进程通过 handle 0 就能访问 servicemanager</strong>（内核在建 ref 时特殊处理 <code>desc = 0</code>）。</p>
+<h3 id="section-5-2-注册服务-addservice">5.2 注册服务（<code>addService</code>）</h3>
+<p><img src="/images/binder/05-6.png" alt="5.2 注册服务（addService）（图 6）"></p>
+<p><strong>关键</strong>：ServiceManager 里存的是 <strong><code>handle</code>（对 SM 进程有效的句柄）</strong>，不是 node，也不是字符串地址。之后别人来查，SM 把这个 handle 传给别人，内核再翻译成别人的 handle。</p>
+<h3 id="section-5-3-查询服务-getservice-checkservice">5.3 查询服务（<code>getService</code> / <code>checkService</code>）</h3>
+<p><img src="/images/binder/05-7.png" alt="5.3 查询服务（getService / checkService）（图 7）"></p>
+<p><strong>所以 <code>getService</code> 本身只是一次普通的 Binder 调用</strong> —— 它返回一个 <code>IBinder</code>（<code>BinderProxy</code>），这个 <code>BinderProxy</code> 内部持有 <code>handle=M</code>。</p>
+<h3 id="section-5-4-java-侧的-servicemanager">5.4 Java 侧的 ServiceManager</h3>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// android.os.ServiceManager （隐藏类）
+public static IBinder getService(String name) {
+    // 内部通过 ServiceManagerProxy 调用 handle 0
+}
+
+// 常用封装
+ServiceManager.getService(&quot;activity&quot;);            // → IActivityManager
+ServiceManager.getService(&quot;package&quot;);             // → IPackageManager
+</code></pre></div>
+<hr>
+<h2 id="section-6-完整的字节流转表">6. 完整的字节流转表</h2>
+<p>把「数据在这条链路上每一站长什么样」列成表：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>位置</th>
+<th>数据的形态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Java Proxy</td>
+<td><code>String &quot;hi&quot;</code> 对象</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Java <code>Parcel</code></td>
+<td>负载字节：<code>[len=2][h\0i\0][\0\0]</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>native <code>Parcel</code>（同一块内存）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>binder_transaction_data</code></td>
+<td><code>{handle:42, code:1, data_size:48, data.ptr.buffer:0x7f...}</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>mOut</code> 命令流</td>
+<td><code>[BC_TRANSACTION(4B)][binder_transaction_data]</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>binder_write_read</code></td>
+<td><code>{write_buffer:0x7f...(mOut), read_buffer:0x7f...(mIn)}</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td>ioctl 入参</td>
+<td>指向 <code>binder_write_read</code> 的用户态指针</td>
+</tr>
+<tr>
+<td>8</td>
+<td>内核栈</td>
+<td><code>binder_transaction_data</code> 的<strong>值拷贝</strong></td>
+</tr>
+<tr>
+<td>9</td>
+<td>目标进程 binder buffer</td>
+<td>负载字节 <code>[len=2][h\0i\0][\0\0]</code>（<strong>一次拷贝</strong>）</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>binder_transaction</code></td>
+<td><code>{from: 线程A, to_proc: 目标, code:1, flags:0}</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td>目标线程 todo</td>
+<td><code>binder_work{BINDER_WORK_TRANSACTION}</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>mIn</code>（Server 侧）返回流</td>
+<td><code>[BR_TRANSACTION(4B)][binder_transaction_data]</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td>Server 的 <code>Parcel buffer</code></td>
+<td><code>ipcSetDataReference()</code> → <strong>直接指向第 9 步那块内存</strong></td>
+</tr>
+<tr>
+<td>14</td>
+<td>Java <code>Stub.onTransact</code> 的 <code>data</code></td>
+<td>同上（Java Parcel 包着 native Parcel）</td>
+</tr>
+<tr>
+<td>15</td>
+<td><code>readString()</code></td>
+<td>拷贝出一个 Java <code>String</code>（这是一次用户态拷贝）</td>
+</tr>
+<tr>
+<td>16</td>
+<td>返回值路径</td>
+<td>对称反向，负载大小 = <code>[int32 0][&quot;hi&quot; 的编码]</code></td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-7-小结-三条主线">7. 小结：三条主线</h2>
+<p><img src="/images/binder/05-8.png" alt="7. 小结：三条主线（图 8）"></p>
+<ul>
+<li><strong>打包</strong>：<code>Proxy</code> 把方法调用变成 <code>[code][Parcel]</code>，<code>writeTransactionData</code> 加上句柄和元数据，<code>ioctl</code> 送进内核。</li>
+<li><strong>投递</strong>：内核用三棵红黑树找到目标，在<strong>目标进程</strong>分配缓冲区并做<strong>唯一一次数据拷贝</strong>，然后唤醒目标线程。</li>
+<li><strong>解包</strong>：<code>Stub</code> 从指向内核缓冲区的 <code>Parcel</code> 里读出参数，调用真实实现，<code>BC_REPLY</code> 原路送回。</li>
+</ul>
+<hr>
+<p>下一章：<a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a> —— 引用计数、死亡通知、线程池、大小限制等细节。</p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/06-进阶专题/"><small>上一篇</small><strong>Android Binder 06：进阶专题</strong></a><a href="/2026/11/11/04-内核数据结构/"><small>下一篇</small><strong>Android Binder 04：内核数据结构</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-0-前置条件-进程是怎么接入-binder-的" title="0. 前置条件：进程是怎么接入 Binder 的">0. 前置条件：进程是怎么接入 Binder 的</a></li><li class="toc-level-2"><a href="#section-1-端到端时序-一次同步调用" title="1. 端到端时序：一次同步调用">1. 端到端时序：一次同步调用</a></li><li class="toc-level-3"><a href="#section-1-1-总览图" title="1.1 总览图">1.1 总览图</a></li><li class="toc-level-3"><a href="#section-1-2-一步步拆解" title="1.2 一步步拆解">1.2 一步步拆解</a></li><li class="toc-level-4"><a href="#section-step-1-proxy-序列化参数-纯用户态-无内核参与" title="Step 1 — Proxy 序列化参数（纯用户态，无内核参与）">Step 1 — Proxy 序列化参数（纯用户态，无内核参与）</a></li><li class="toc-level-4"><a href="#section-step-2-进入-binderproxy-transact" title="Step 2 — 进入 BinderProxy.transact">Step 2 — 进入 BinderProxy.transact</a></li><li class="toc-level-4"><a href="#section-step-3-bpbinder-transact" title="Step 3 — BpBinder::transact">Step 3 — BpBinder::transact</a></li><li class="toc-level-4"><a href="#section-step-4-ipcthreadstate-transact-打包" title="Step 4 — IPCThreadState::transact 打包">Step 4 — IPCThreadState::transact 打包</a></li><li class="toc-level-4"><a href="#section-step-5-talkwithdriver-唯一的一次系统调用" title="Step 5 — talkWithDriver：唯一的一次系统调用">Step 5 — talkWithDriver：唯一的一次系统调用</a></li><li class="toc-level-4"><a href="#section-step-6-内核-binder-transaction-找人-分配-拷贝" title="Step 6 — 内核 binder_transaction()：找人、分配、拷贝">Step 6 — 内核 binder_transaction()：找人、分配、拷贝</a></li><li class="toc-level-4"><a href="#section-step-7-binder-proc-transaction-选择目标线程并唤醒" title="Step 7 — binder_proc_transaction()：选择目标线程并唤醒">Step 7 — binder_proc_transaction()：选择目标线程并唤醒</a></li><li class="toc-level-4"><a href="#section-step-8-client-收到-br-transaction-complete-但还没返回" title="Step 8 — Client 收到 BR_TRANSACTION_COMPLETE（但还没返回！）">Step 8 — Client 收到 BR_TRANSACTION_COMPLETE（但还没返回！）</a></li><li class="toc-level-4"><a href="#section-step-9-server-线程醒来-执行-br-transaction" title="Step 9 — Server 线程醒来，执行 BR_TRANSACTION">Step 9 — Server 线程醒来，执行 BR_TRANSACTION</a></li><li class="toc-level-4"><a href="#section-step-10-bbinder-transact-jni-java-stub-ontransact" title="Step 10 — BBinder::transact → JNI → Java Stub.onTransact">Step 10 — BBinder::transact → JNI → Java Stub.onTransact</a></li><li class="toc-level-4"><a href="#section-step-11-stub-执行真实逻辑-写-reply" title="Step 11 — Stub 执行真实逻辑，写 reply">Step 11 — Stub 执行真实逻辑，写 reply</a></li><li class="toc-level-4"><a href="#section-step-12-sendreply-原路返回" title="Step 12 — sendReply 原路返回">Step 12 — sendReply 原路返回</a></li><li class="toc-level-2"><a href="#section-2-同一进程内的调用-本地快路径" title="2. 同一进程内的调用（本地快路径）">2. 同一进程内的调用（本地快路径）</a></li><li class="toc-level-2"><a href="#section-3-oneway-调用" title="3. oneway 调用">3. oneway 调用</a></li><li class="toc-level-3"><a href="#section-3-1-差异点" title="3.1 差异点">3.1 差异点</a></li><li class="toc-level-3"><a href="#section-3-2-时序图" title="3.2 时序图">3.2 时序图</a></li><li class="toc-level-3"><a href="#section-3-3-oneway-的排队规则-binder-proc-transaction" title="3.3 oneway 的排队规则（binder_proc_transaction）">3.3 oneway 的排队规则（binder_proc_transaction）</a></li><li class="toc-level-3"><a href="#section-3-4-oneway-的常见坑" title="3.4 oneway 的常见坑">3.4 oneway 的常见坑</a></li><li class="toc-level-2"><a href="#section-4-回调-反向-rpc" title="4. 回调（反向 RPC）">4. 回调（反向 RPC）</a></li><li class="toc-level-3"><a href="#section-4-1-时序" title="4.1 时序">4.1 时序</a></li><li class="toc-level-3"><a href="#section-4-2-关键认知" title="4.2 关键认知">4.2 关键认知</a></li><li class="toc-level-2"><a href="#section-5-servicemanager-服务注册与查询" title="5. ServiceManager：服务注册与查询">5. ServiceManager：服务注册与查询</a></li><li class="toc-level-3"><a href="#section-5-1-servicemanager-自己怎么注册的" title="5.1 ServiceManager 自己怎么注册的">5.1 ServiceManager 自己怎么注册的</a></li><li class="toc-level-3"><a href="#section-5-2-注册服务-addservice" title="5.2 注册服务（addService）">5.2 注册服务（addService）</a></li><li class="toc-level-3"><a href="#section-5-3-查询服务-getservice-checkservice" title="5.3 查询服务（getService / checkService）">5.3 查询服务（getService / checkService）</a></li><li class="toc-level-3"><a href="#section-5-4-java-侧的-servicemanager" title="5.4 Java 侧的 ServiceManager">5.4 Java 侧的 ServiceManager</a></li><li class="toc-level-2"><a href="#section-6-完整的字节流转表" title="6. 完整的字节流转表">6. 完整的字节流转表</a></li><li class="toc-level-2"><a href="#section-7-小结-三条主线" title="7. 小结：三条主线">7. 小结：三条主线</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

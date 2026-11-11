@@ -1,0 +1,30 @@
+%% 内核数据结构关系
+flowchart TB
+    subgraph PROC["binder_proc (Client 进程)"]
+        PT["threads 红黑树<br/>binder_thread x N"]
+        PRD["refs_by_desc 红黑树<br/>(按句柄排序)"]
+        PRN["refs_by_node 红黑树<br/>(按 node 排序)"]
+        PND["nodes 红黑树<br/>(本进程的对象)"]
+        PTO["todo 队列"]
+        PALLOC["binder_alloc<br/>缓冲区分配器"]
+    end
+
+    subgraph PROC2["binder_proc (Server 进程)"]
+        SND["nodes 红黑树"]
+        SALLOC["binder_alloc"]
+    end
+
+    REF["binder_ref<br/>desc = 42"]
+    NODE["binder_node<br/>ptr = 0x7f00a000"]
+
+    PRD --> REF
+    PRN --> REF
+    REF -->|"node 指针"| NODE
+    NODE -->|"node_entry"| REF
+    SND --> NODE
+    NODE -->|"proc 指针"| PROC2
+
+    style REF fill:#ffcc99
+    style NODE fill:#ffcc99
+    style PALLOC fill:#ffe9c7
+    style SALLOC fill:#ffe9c7

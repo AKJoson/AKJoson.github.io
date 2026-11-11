@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 04：内核数据结构 · 殷仔的博客</title><meta name="description" content="串联 binder_proc、binder_thread、binder_node、binder_ref 和 binder_buffer，解释内存映射与一次拷贝的实现。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 04：内核数据结构"><meta property="og:description" content="串联 binder_proc、binder_thread、binder_node、binder_ref 和 binder_buffer，解释内存映射与一次拷贝的实现。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 04：内核数据结构</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 25 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-1-整体关系图">1. 整体关系图</a></li><li><a href="#section-2-binder-proc-一个进程的-binder-状态">2. binder_proc：一个进程的 Binder 状态</a></li><li><a href="#section-3-binder-thread-一个线程的-binder-状态">3. binder_thread：一个线程的 Binder 状态</a></li><li><a href="#section-looper-状态机">looper 状态机</a></li><li><a href="#section-transaction-stack-处理嵌套调用的关键">transaction_stack：处理嵌套调用的关键</a></li><li><a href="#section-4-binder-node-服务端对象在内核里的-户口">4. binder_node：服务端对象在内核里的「户口」</a></li><li><a href="#section-ptr-和-cookie-的区别-容易搞混">ptr 和 cookie 的区别（容易搞混）</a></li><li><a href="#section-5-binder-ref-客户端进程对某个对象的-引用记录">5. binder_ref：客户端进程对某个对象的「引用记录」</a></li><li><a href="#section-6-binder-buffer-与-binder-alloc-内存模型">6. binder_buffer 与 binder_alloc：内存模型</a></li><li><a href="#section-6-1-binder-buffer">6.1 binder_buffer</a></li><li><a href="#section-6-2-binder-alloc-每个进程一个">6.2 binder_alloc：每个进程一个</a></li><li><a href="#section-6-3-内存映射-binder-的-一次拷贝-是怎么实现的">6.3 内存映射：Binder 的「一次拷贝」是怎么实现的</a></li><li><a href="#section-第一步-进程启动时-mmap-一块缓冲区">第一步：进程启动时 mmap 一块缓冲区</a></li><li><a href="#section-第二步-内核把这块内存的物理页同时映射到-内核虚拟地址">第二步：内核把这块内存的物理页同时映射到「内核虚拟地址」</a></li><li><a href="#section-第三步-发送时-内核把数据从-发送方用户空间-拷到-接收方缓冲区">第三步：发送时，内核把数据从「发送方用户空间」拷到「接收方缓冲区」</a></li><li><a href="#section-第四步-接收方用完后归还">第四步：接收方用完后归还</a></li><li><a href="#section-6-4-为什么大小是-1mb-8kb">6.4 为什么大小是 1MB - 8KB？</a></li><li><a href="#section-7-引用计数-三种-strong-两种-weak">7. 引用计数：三种 strong / 两种 weak</a></li><li><a href="#section-8-内核入口-从-ioctl-到事务投递的完整函数链">8. 内核入口：从 ioctl 到事务投递的完整函数链</a></li><li><a href="#section-binder-thread-read-如何挑选待办">binder_thread_read 如何挑选待办</a></li><li><a href="#section-9-三种查找路径-面试常问">9. 三种查找路径（面试常问）</a></li><li><a href="#section-10-debugfs-直接观察这些结构体">10. debugfs：直接观察这些结构体</a></li><li><a href="#section-11-小结">11. 小结</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<p>这一章回答：<strong>当内核收到 <code>BC_TRANSACTION</code> 时，它是靠什么数据结构找到目标进程、找到目标对象、把数据送过去的？</strong></p>
+<p>内核里只有 5 个核心结构体：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>结构体</th>
+<th>数量级</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>binder_proc</code></td>
+<td>每个使用 Binder 的<strong>进程</strong>一个</td>
+<td>「这个进程是谁，它有哪些线程/对象/引用」</td>
+</tr>
+<tr>
+<td><code>binder_thread</code></td>
+<td>每个参与 Binder 的<strong>线程</strong>一个</td>
+<td>「这个线程在等什么/有什么待办」</td>
+</tr>
+<tr>
+<td><code>binder_node</code></td>
+<td>每个<strong>服务端对象</strong>一个</td>
+<td>「这个对象的实现在哪个进程的哪个地址」</td>
+</tr>
+<tr>
+<td><code>binder_ref</code></td>
+<td>每个<strong>跨进程引用</strong>一个</td>
+<td>「某个进程用句柄 N 指向某个 node」</td>
+</tr>
+<tr>
+<td><code>binder_buffer</code></td>
+<td>每个<strong>进行中的事务</strong>一个</td>
+<td>「这次事务的数据放在哪」</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<h2 id="section-1-整体关系图">1. 整体关系图</h2>
+<p><strong>先记住这张图，后面每个结构体都是它的一个角</strong>：</p>
+<p><img src="/images/binder/04-1.png" alt="1. 整体关系图（图 1）"></p>
+<p><strong>核心关系</strong>：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">binder_ref.proc      → 谁持有这个引用（Client 进程）
+binder_ref.node      → 引用的是哪个对象
+binder_ref.desc      → Client 进程看到的句柄号
+binder_node.proc     → 对象实现在哪个进程（Server 进程）
+binder_node.ptr      → 对象在 Server 进程的用户态地址
+binder_node.cookie   → 对象的&quot;私有数据&quot;（BBinder 自身或 JavaBBinderHolder 地址）
+</code></pre></div>
+<hr>
+<h2 id="section-2-binder-proc-一个进程的-binder-状态">2. <code>binder_proc</code>：一个进程的 Binder 状态</h2>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">/* drivers/android/binder.c */
+struct binder_proc {
+	struct hlist_node proc_node;        /* 挂到全局 binder_procs 链表 */
+	struct rb_root threads;             /* 本进程所有 binder_thread，key = pid */
+	struct rb_root nodes;               /* 本进程&quot;拥有&quot;的所有 binder_node，key = ptr */
+	struct rb_root refs_by_desc;        /* 本进程持有的 binder_ref，key = desc(句柄) */
+	struct rb_root refs_by_node;        /* 同一批 ref，key = node 指针 */
+
+	struct list_head waiting_threads;   /* 空闲等待任务的线程 (LRU) */
+	int pid;
+	struct task_struct *tsk;
+	const struct cred *cred;
+	struct hlist_node deferred_work_node;
+	int deferred_work;
+	bool is_dead;                       /* 进程是否已死 */
+
+	struct list_head todo;              /* 进程级待处理工作队列 */
+	struct binder_stats stats;
+	struct list_head delivered_death;   /* 待处理的死亡通知 */
+	int max_threads;                    /* Binder 线程池上限，默认 15 */
+	int requested_threads;              /* 已请求但还没起来的线程数 */
+	int requested_threads_started;
+	int tmp_ref;
+	long default_priority;
+	struct dentry *debugfs_entry;
+	struct binder_alloc alloc;          /* ★ 缓冲区分配器（每个进程一份） */
+	struct binder_context *context;     /* 指向 binder 域（binder/hwbinder/vndbinder） */
+	spinlock_t inner_lock;
+	spinlock_t outer_lock;
+	struct dentry *proc_log_dir;        /* 事务日志（debugfs） */
+};
+</code></pre></div>
+<p><strong>为什么 <code>binder_proc</code> 是核心？</strong> 因为它把「进程」和「Binder 资源」绑定了：</p>
+<ul>
+<li><code>nodes</code> = 这个进程<strong>提供的</strong>服务</li>
+<li><code>refs_by_desc</code> = 这个进程<strong>引用的</strong>服务</li>
+<li><code>alloc</code> = 这个进程的 Binder 缓冲区（<strong>关键</strong>：是<strong>接收方</strong>的缓冲区）</li>
+</ul>
+<p>全局链表 <code>static HLIST_HEAD(binder_procs);</code> 保存所有 <code>binder_proc</code>。</p>
+<hr>
+<h2 id="section-3-binder-thread-一个线程的-binder-状态">3. <code>binder_thread</code>：一个线程的 Binder 状态</h2>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_thread {
+	struct binder_proc *proc;
+	struct rb_node rb_node;                 /* 在 proc-&gt;threads 里的节点 */
+	struct list_head waiting_thread_node;   /* 在 proc-&gt;waiting_threads 里的节点 */
+	int pid;
+	int looper;              /* 见下面 looper 状态机 */
+	bool looper_need_return;
+	struct binder_transaction *transaction_stack;  /* ★ 事务栈 */
+	struct list_head todo;                  /* ★ 线程级待办队列 */
+	u32 return_error;
+	u32 return_protocol;
+	struct binder_stats stats;
+};
+</code></pre></div>
+<h3 id="section-looper-状态机"><code>looper</code> 状态机</h3>
+<p><img src="/images/binder/04-2.png" alt="looper 状态机（图 2）"></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>常量</th>
+<th>值</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BINDER_LOOPER_STATE_REGISTERED</code></td>
+<td>0x01</td>
+<td>线程池注册线程</td>
+</tr>
+<tr>
+<td><code>BINDER_LOOPER_STATE_ENTERED</code></td>
+<td>0x02</td>
+<td>已进入主循环</td>
+</tr>
+<tr>
+<td><code>BINDER_LOOPER_STATE_EXITED</code></td>
+<td>0x04</td>
+<td>已退出</td>
+</tr>
+<tr>
+<td><code>BINDER_LOOPER_STATE_INVALID</code></td>
+<td>0x08</td>
+<td>状态非法</td>
+</tr>
+<tr>
+<td><code>BINDER_LOOPER_STATE_WAITING</code></td>
+<td>0x10</td>
+<td>正在等待工作</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-transaction-stack-处理嵌套调用的关键"><code>transaction_stack</code>：处理嵌套调用的关键</h3>
+<p>当线程 T 正在处理一个事务，而这个事务里又发起了一次<strong>同步调用</strong>时，内核需要记录「我在为谁干活」。这就是 <code>transaction_stack</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">T 处理事务 X（来自 A）→ 又调 B → 阻塞
+    transaction_stack: X → (T 等 B 的回复)
+
+B 反过来回调 T → 内核从栈中找到 X 的 context，允许嵌套
+</code></pre></div>
+<p><strong>规则</strong>：同步调用可以<strong>嵌套</strong>（栈式），但不能形成环（A→B→A 用同一个线程会死锁，需要靠 <code>BR_SPAWN_LOOPER</code> 开新线程）。</p>
+<hr>
+<h2 id="section-4-binder-node-服务端对象在内核里的-户口">4. <code>binder_node</code>：服务端对象在内核里的「户口」</h2>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_node {
+	int debug_id;
+	struct binder_work work;
+	union {
+		struct rb_node rb_node;     /* 活着时：挂在 proc-&gt;nodes */
+		struct hlist_node dead_node;/* 死了时：挂在全局 binder_dead_nodes */
+	};
+	struct binder_proc *proc;       /* ★ 拥有这个对象的进程 */
+	struct hlist_head refs;         /* 所有指向它的 binder_ref 链表 */
+
+	int internal_strong_refs;       /* 有强引用指向它的 ref 数量(内核自己维护) */
+	int local_weak_refs;            /* 用户态自己发的弱引用 (BC_INCREFS) */
+	int local_strong_refs;          /* 用户态自己发的强引用 (BC_ACQUIRE) */
+	int tmp_refs;
+
+	binder_uintptr_t ptr;           /* ★ 对象在 proc 里的用户态地址 (BBinder*) */
+	binder_uintptr_t cookie;        /* ★ 对象的附加信息 (JavaBBinderHolder* / this) */
+
+	struct {
+		uint8_t has_strong_ref : 1;
+		uint8_t pending_strong_ref : 1;
+		uint8_t has_weak_ref : 1;
+		uint8_t pending_weak_ref : 1;
+	};
+	/* 版本不同字段不同 */
+	int min_priority;
+	bool accept_fds;
+	bool oneway_spam_detected;
+
+	int has_async_transaction;      /* ★ 是否已有 oneway 事务在排队 */
+	struct list_head async_todo;    /* ★ oneway 事务的排队区 */
+};
+</code></pre></div>
+<h3 id="section-ptr-和-cookie-的区别-容易搞混"><code>ptr</code> 和 <code>cookie</code> 的区别（容易搞混）</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th><code>ptr</code></th>
+<th><code>cookie</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>用户态对应</td>
+<td><code>BBinder*</code>（对象地址）</td>
+<td><code>JavaBBinderHolder*</code> 或 <code>this</code></td>
+</tr>
+<tr>
+<td>用途</td>
+<td>内核用它做<strong>去重</strong>：同一个地址只建一个 node</td>
+<td>内核原样存着，创建事务时回传给用户态</td>
+</tr>
+<tr>
+<td>用户态怎么用 cookie</td>
+<td>—</td>
+<td><code>BBinder::onTransact</code> 里 <code>IBinder::getCookie()</code>，用于 <code>JavaBBinder</code> 找回 Java 对象</td>
+</tr>
+</tbody>
+</table></div>
+<p>对于 Java 对象：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">Java:  MyServiceImpl extends IMyService.Stub extends android.os.Binder
+   ↓ JNI 创建
+Native: JavaBBinderHolder  ←──────────── cookie 指向这里
+             └─ JavaBBinder : BBinder  ←── ptr 指向这里（的 weakref）
+                   └─ jobject mObject  ←─ 真正的 Java Binder 实例
+</code></pre></div>
+<hr>
+<h2 id="section-5-binder-ref-客户端进程对某个对象的-引用记录">5. <code>binder_ref</code>：客户端进程对某个对象的「引用记录」</h2>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_ref {
+	int debug_id;
+	struct binder_work work;
+	struct rb_node rb_node_desc;    /* 挂在 proc-&gt;refs_by_desc，key = desc */
+	struct rb_node rb_node_node;    /* 挂在 proc-&gt;refs_by_node，key = node */
+	struct hlist_node node_entry;   /* 挂在 node-&gt;refs */
+	struct binder_proc *proc;       /* ★ 引用持有者 (Client) */
+	struct binder_node *node;       /* ★ 被引用的对象 */
+	u32 desc;                       /* ★ 句柄号 */
+	struct binder_ref_data data;    /* { int strong; int weak; } 引用计数 */
+	/* ... */
+};
+</code></pre></div>
+<p><strong><code>desc</code> 就是客户端看到的 handle。</strong> 一个 <code>binder_ref</code> 同时挂在两棵红黑树上（<code>refs_by_desc</code> 和 <code>refs_by_node</code>），因为内核需要<strong>双向查找</strong>：</p>
+<ul>
+<li>收到 <code>BC_TRANSACTION</code> 带 handle → 查 <code>refs_by_desc</code>（O(log n)）</li>
+<li>收到一个 node，要检查「这个进程是否已经有引用」→ 查 <code>refs_by_node</code></li>
+</ul>
+<hr>
+<h2 id="section-6-binder-buffer-与-binder-alloc-内存模型">6. <code>binder_buffer</code> 与 <code>binder_alloc</code>：内存模型</h2>
+<h3 id="section-6-1-binder-buffer">6.1 <code>binder_buffer</code></h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">/* drivers/android/binder_alloc.h */
+struct binder_buffer {
+	struct list_head entry;    /* 按地址序挂在 alloc-&gt;buffers */
+	struct rb_node rb_node;    /* 空闲时挂在 alloc-&gt;free_buffers（按大小） */
+	unsigned free:1;
+	unsigned clear_on_free:1;
+	unsigned allow_user_free:1;   /* 是否允许用户态 BC_FREE_BUFFER 回收 */
+	unsigned async_transaction:1;
+	unsigned oneway_spam_suspect:1;
+	unsigned debug_id:27;
+
+	struct binder_transaction *transaction;  /* 属于哪次事务 */
+	struct binder_node *target_node;
+	size_t data_size;
+	size_t offsets_size;
+	size_t extra_buffers_size;
+	void __user *user_data;    /* ★ 这块内存在目标进程用户态里的地址 */
+};
+</code></pre></div>
+<h3 id="section-6-2-binder-alloc-每个进程一个">6.2 <code>binder_alloc</code>：每个进程一个</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_alloc {
+	struct mutex mutex;
+	struct vm_area_struct *vma;      /* 用户态 mmap 的 vma */
+	struct mm_struct *vma_vm_mm;
+	struct list_head buffers;        /* 所有 buffer，按地址 */
+	struct rb_root free_buffers;     /* 空闲区域，按大小 */
+	struct rb_root allocated_buffers;
+	size_t free_async_space;         /* oneway 事务可用的剩余空间（一半） */
+	struct binder_lru_page *pages;   /* ★ 物理页（延迟映射 + LRU 回收） */
+	size_t buffer_size;              /* 通常 1MB - 8KB */
+	uint32_t buffer_free;
+	int pid;
+};
+</code></pre></div>
+<h3 id="section-6-3-内存映射-binder-的-一次拷贝-是怎么实现的">6.3 内存映射：Binder 的「一次拷贝」是怎么实现的</h3>
+<p>这是 Binder 性能优势的根本。</p>
+<h4 id="section-第一步-进程启动时-mmap-一块缓冲区">第一步：进程启动时 mmap 一块缓冲区</h4>
+<p><code>ProcessState</code> 构造时：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// frameworks/native/libs/binder/ProcessState.cpp
+#define BINDER_VM_SIZE ((1 * 1024 * 1024) - sysconf(_SC_PAGE_SIZE) * 2)
+//                                         ↑ 1MB - 8KB = 1016KB
+
+ProcessState::ProcessState(const char *driver)
+{
+    mDriverFD = open(driver, O_RDWR | O_CLOEXEC);
+    // ...
+    mVMStart = mmap(nullptr, BINDER_VM_SIZE, PROT_READ,
+                    MAP_PRIVATE | MAP_NORESERVE, mDriverFD, 0);
+    if (mVMStart == MAP_FAILED) { /* 失败 */ }
+}
+</code></pre></div>
+<p>注意 <code>PROT_READ</code> —— <strong>用户态对这块内存只读</strong>！数据是内核写进去的。</p>
+<blockquote>
+<p>因为 <code>mmap</code> 的对象是 <code>/dev/binder</code>，走的不是普通文件的 page cache，而是 Binder 驱动自己的 <code>binder_mmap()</code>。</p>
+</blockquote>
+<h4 id="section-第二步-内核把这块内存的物理页同时映射到-内核虚拟地址">第二步：内核把这块内存的物理页同时映射到「内核虚拟地址」</h4>
+<p><code>binder_mmap()</code> → <code>binder_alloc_mmap_handler()</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">int binder_alloc_mmap_handler(struct binder_alloc *alloc, struct vm_area_struct *vma)
+{
+	struct binder_buffer *buffer;
+
+	mutex_lock(&amp;binder_alloc_mmap_lock);
+	if (alloc-&gt;buffer_size) { /* 已经 mmap 过了，一个进程只能一次 */ }
+	alloc-&gt;buffer_size = size;
+	mutex_unlock(&amp;binder_alloc_mmap_lock);
+
+	/* 构造一个覆盖整个区域的&quot;初始空闲 buffer&quot; */
+	atomic_set(&amp;alloc-&gt;buffer_free, 1);
+	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
+	...
+	alloc-&gt;buffer = (void __user *)vma-&gt;vm_start;   /* 记住用户态起始地址 */
+	alloc-&gt;user_buffer_offset = vma-&gt;vm_start - (uintptr_t)alloc-&gt;buffer;  /* 老版本 */
+	...
+	list_add(&amp;buffer-&gt;entry, &amp;alloc-&gt;buffers);
+	buffer-&gt;free = 1;
+	binder_insert_free_buffer(alloc, buffer);
+	...
+}
+</code></pre></div>
+<p><strong>关键概念</strong>：这段内存被映射了两次 ——</p>
+<ul>
+<li>一次在<strong>用户进程的地址空间</strong>（<code>vma-&gt;vm_start</code>，<code>PROT_READ</code>）</li>
+<li>一次在<strong>内核可以访问的地方</strong>（<code>alloc-&gt;buffer</code> 或通过 <code>kmap</code> 每个物理页）</li>
+</ul>
+<blockquote>
+<p>新内核（4.14+）改成 <code>binder_lru_page</code> 数组，只在需要时 <code>kmap</code> 单个物理页，并且支持延迟分配和 LRU 回收，但「同一批物理页同时可被内核和用户态访问」这个本质没变。</p>
+</blockquote>
+<h4 id="section-第三步-发送时-内核把数据从-发送方用户空间-拷到-接收方缓冲区">第三步：发送时，内核把数据从「发送方用户空间」拷到「接收方缓冲区」</h4>
+<p>这才是「一次拷贝」的那一次：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">// drivers/android/binder.c — binder_transaction()
+	t-&gt;buffer = binder_alloc_new_buf(&amp;target_proc-&gt;alloc,   /* ★ 注意是 target_proc！ */
+	                                  tr-&gt;data_size, tr-&gt;offsets_size,
+	                                  extra_buffers_size,
+	                                  !reply &amp;&amp; (t-&gt;flags &amp; TF_ONE_WAY));
+	...
+	buffer = t-&gt;buffer;
+
+	/* 从&quot;发送方&quot;的用户态地址，拷到&quot;接收方&quot;的 buffer 里 */
+	if (binder_alloc_copy_user_to_buffer(
+				&amp;target_proc-&gt;alloc,
+				t-&gt;buffer,
+				ALIGN(secctx_sz, sizeof(u64)),
+				(const void __user *)(uintptr_t)tr-&gt;data.ptr.buffer,
+				tr-&gt;data_size)) {
+		/* 失败 */
+	}
+</code></pre></div>
+<p>于是：</p>
+<p><img src="/images/binder/04-3.png" alt="第三步：发送时，内核把数据从「发送方用户空间」拷到「接收方缓冲区」（图 3）"></p>
+<p><strong>所以「一次拷贝」的准确含义是</strong>：</p>
+<ul>
+<li>发送方用户态 → 接收方 Binder 缓冲区：<strong>1 次</strong>（在内核里完成）</li>
+<li>接收方读数据：<strong>0 次</strong>（直接读自己 mmap 的那块内存）</li>
+</ul>
+<p>对比 Socket：<code>send()</code> 拷到内核 socket buffer（1 次），<code>recv()</code> 再拷到用户态（2 次）。Binder 省掉了第二次。</p>
+<h4 id="section-第四步-接收方用完后归还">第四步：接收方用完后归还</h4>
+<p>接收方处理完事务，发 <code>BC_FREE_BUFFER</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// IPCThreadState::freeBuffer()
+status_t IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
+        size_t dataSize, const binder_size_t* objects, size_t objectsSize,
+        void* cookie)
+{
+    mOut.writeInt32(BC_FREE_BUFFER);
+    mOut.writePointer((uintptr_t)data);
+    // ...
+}
+</code></pre></div>
+<p>内核 <code>binder_free_buf()</code> 把它标记为空闲，重新挂回 <code>free_buffers</code> 红黑树（如果 <code>allow_user_free</code> 允许的话）。</p>
+<h3 id="section-6-4-为什么大小是-1mb-8kb">6.4 为什么大小是 <code>1MB - 8KB</code>？</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">#define BINDER_VM_SIZE ((1 * 1024 * 1024) - sysconf(_SC_PAGE_SIZE) * 2)
+</code></pre></div>
+<ul>
+<li>1MB 是<strong>每个进程</strong>的 Binder 缓冲区上限。这是 <code>Parcel</code> 不能超过 1MB 的根本原因（实际单个事务还有更小的限制，见 <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/"><code>06-进阶专题.md</code></a>）。</li>
+<li>减 8KB 是给内核的其他映射留一点空间（早期是 <code>- sysconf(_SC_PAGE_SIZE) * 2</code>，即 2 个页）。</li>
+<li><strong>oneway 事务只能用到这个空间的一半</strong>（<code>free_async_space = buffer_size / 2</code>），防止异步事务把同步事务饿死。</li>
+</ul>
+<hr>
+<h2 id="section-7-引用计数-三种-strong-两种-weak">7. 引用计数：三种 strong / 两种 weak</h2>
+<p><code>binder_node</code> 上有三个计数，很多人会看晕，逐个解释：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+<th>谁来改</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>internal_strong_refs</code></td>
+<td>有<strong>强引用句柄</strong>指向该 node 的数量（跨进程的）</td>
+<td>内核在创建/删除 <code>binder_ref</code> 时改</td>
+</tr>
+<tr>
+<td><code>local_strong_refs</code></td>
+<td>对象<strong>拥有者进程自己</strong>对它的强引用（<code>BC_ACQUIRE</code>）</td>
+<td>用户态（<code>BpBinder::incStrongHandle</code> 之类）</td>
+</tr>
+<tr>
+<td><code>local_weak_refs</code></td>
+<td>对象<strong>拥有者进程自己</strong>对它的弱引用（<code>BC_INCREFS</code>）</td>
+<td>用户态</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>binder_ref.data</code> 上：</p>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">struct binder_ref_data {
+	int debug_id;
+	uint32_t desc;
+	int strong;    /* 强引用计数 */
+	int weak;      /* 弱引用计数 */
+};
+</code></pre></div>
+<p><strong>核心规则</strong>：</p>
+<ol>
+<li><strong>有强引用 → node 必须活着。</strong></li>
+<li><strong>只有弱引用 → node 可以「半死」</strong>：内核通过 <code>BR_RELEASE</code>/<code>BR_DECREFS</code> 通知拥有者「没人用你了，可以释放对象了」，但保留 node 结构以便复活。</li>
+<li><strong>一个进程内，同一个 node 的所有引用共用一个 <code>binder_ref</code></strong>（内核按 <code>node</code> 去重），所以 <code>ref-&gt;data.strong</code> 是该进程内所有 <code>BpBinder</code> 的强引用总数。</li>
+</ol>
+<p>用户态发命令的对应关系（<code>libbinder</code>）：</p>
+<div class="code-block"><div class="code-toolbar"><span>cpp</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-cpp">// BpBinder.cpp
+void BpBinder::incStrongHandle(int32_t handle, ...) {
+    // 发 BC_ACQUIRE
+}
+void BpBinder::decStrongHandle(int32_t handle) {
+    // 发 BC_RELEASE
+}
+void BpBinder::incWeakHandle(int32_t handle, ...) {
+    // 发 BC_INCREFS
+}
+void BpBinder::decWeakHandle(int32_t handle) {
+    // 发 BC_DECREFS
+}
+</code></pre></div>
+<p>内核要反过来要求拥有者建引用时，发 <code>BR_INCREFS</code> / <code>BR_ACQUIRE</code>：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">Client 创建对 node 的强引用
+   → 内核：node.internal_strong_refs++
+   → 如果这是第一个强引用，内核给 node 的拥有者进程发 BR_ACQUIRE
+   → 拥有者进程收到后，对本地 BBinder 调 incStrong()（真正持有）
+</code></pre></div>
+<p>这个「反向通知」机制保证了<strong>跨进程引用能正确映射到本地的强/弱引用</strong>，从而正确处理「客户端不释放 → 服务端对象不能销毁」。</p>
+<hr>
+<h2 id="section-8-内核入口-从-ioctl-到事务投递的完整函数链">8. 内核入口：从 ioctl 到事务投递的完整函数链</h2>
+<p><img src="/images/binder/04-4.png" alt="8. 内核入口：从 ioctl 到事务投递的完整函数链（图 4）"></p>
+<h3 id="section-binder-thread-read-如何挑选待办"><code>binder_thread_read</code> 如何挑选待办</h3>
+<div class="code-block"><div class="code-toolbar"><span>c</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-c">static int binder_thread_read(struct binder_proc *proc,
+                              struct binder_thread *thread, ...)
+{
+	/* 优先看自己的 todo，再看进程的 todo */
+	while (1) {
+		if (list_empty(&amp;thread-&gt;todo)) {
+			/* 线程自己没事干，帮忙处理进程级的 */
+			...
+		}
+		...
+		w = binder_dequeue_work_head_ilocked(list);
+		switch (w-&gt;type) {
+		case BINDER_WORK_TRANSACTION:      → BR_TRANSACTION
+		case BINDER_WORK_TRANSACTION_COMPLETE: → BR_TRANSACTION_COMPLETE
+		case BINDER_WORK_NODE:             → BR_INCREFS/ACQUIRE/RELEASE/DECREFS
+		case BINDER_WORK_DEAD_BINDER:      → BR_DEAD_BINDER
+		case BINDER_WORK_CLEAR_DEATH_NOTIFICATION: → BR_CLEAR_DEATH_NOTIFICATION_DONE
+		}
+	}
+}
+</code></pre></div>
+<p><strong>重要</strong>：<code>binder_thread_read</code> 在<strong>拿不到工作</strong>时会调用 <code>binder_wait_for_work()</code> 阻塞（<code>wait_event_interruptible</code>），而不是忙等。这就实现了「Binder 线程平时睡眠，有事务才被唤醒」。</p>
+<hr>
+<h2 id="section-9-三种查找路径-面试常问">9. 三种查找路径（面试常问）</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>场景</th>
+<th>内核怎么找</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Client 发 <code>BC_TRANSACTION</code>，带 <code>handle=42</code></td>
+<td><code>proc-&gt;refs_by_desc</code> 红黑树查 <code>desc==42</code> → <code>binder_ref</code> → <code>ref-&gt;node</code></td>
+</tr>
+<tr>
+<td>要把 Binder 对象传给对端，<code>flat_binder_object</code> 带 <code>ptr=0x7f00a000</code></td>
+<td>在<strong>发送方</strong> <code>proc-&gt;nodes</code> 里查 <code>ptr</code> → <code>binder_node</code>；没有就创建</td>
+</tr>
+<tr>
+<td>要为目标进程建引用</td>
+<td>在 <code>target_proc-&gt;refs_by_node</code> 里查 <code>node</code> → 有就复用（句柄不变），没有就分配新 <code>desc</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>三个红黑树的用途</strong>：</p>
+<ul>
+<li><code>proc-&gt;nodes</code>：按 <code>node-&gt;ptr</code> 排序，用于<strong>同一进程内对象的去重</strong></li>
+<li><code>proc-&gt;refs_by_desc</code>：按 <code>desc</code> 排序，用于<strong>按句柄查引用</strong></li>
+<li><code>proc-&gt;refs_by_node</code>：按 <code>node</code> 排序，用于**检查是否已有引用（避免重复建）</li>
+</ul>
+<hr>
+<h2 id="section-10-debugfs-直接观察这些结构体">10. debugfs：直接观察这些结构体</h2>
+<p>Binder 驱动在 debugfs 里暴露了所有内部状态（需要 root）：</p>
+<div class="code-block"><div class="code-toolbar"><span>bash</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-bash"># 列出所有 binder 进程及其 pid/debug_id
+cat /sys/kernel/debug/binder/proc
+
+# 看某个进程的详细状态：线程、节点、引用、缓冲区
+cat /sys/kernel/debug/binder/proc/&lt;pid&gt;
+
+# 看全局统计
+cat /sys/kernel/debug/binder/stats
+
+# 看所有事务
+cat /sys/kernel/debug/binder/transactions
+
+# 看所有 node
+cat /sys/kernel/debug/binder/nodes
+</code></pre></div>
+<p><code>/sys/kernel/debug/binder/proc/&lt;pid&gt;</code> 的典型输出：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">binder proc state:
+proc 12345
+thread 12345: l 12 need_return 0 tr 0
+thread 12350: l 11 need_return 0 tr 0
+  incoming transaction 123456: 12300 from 11111
+  buffer 123457: 12300 from 11111
+node 123458: u0000007f00a000 c0000007f00b000 hs 1 hw 1 ls 0 lw 0 is 1 iw 1
+  ref 123459: desc 42 s 1 w 1 death 0000000000000000
+</code></pre></div>
+<p>对应关系：</p>
+<ul>
+<li><code>node ... u&lt;ptr&gt; c&lt;cookie&gt; hs/hw/ls/lw/is/iw</code> = 各种强/弱引用计数</li>
+<li><code>ref ... desc 42 s 1 w 1</code> = 句柄 42，强引用 1 个、弱引用 1 个</li>
+</ul>
+<hr>
+<h2 id="section-11-小结">11. 小结</h2>
+<p><img src="/images/binder/04-5.png" alt="11. 小结（图 5）"></p>
+<p><strong>记住三条</strong>：</p>
+<ol>
+<li><strong><code>binder_ref.desc</code> 就是客户端看到的 handle</strong>，它属于<strong>客户端进程</strong>。</li>
+<li><strong>缓冲区分配在接收方进程（<code>target_proc-&gt;alloc</code>）</strong>，这是「一次拷贝」的关键。</li>
+<li><strong>所有查找都靠红黑树</strong>：<code>nodes</code>（按地址）、<code>refs_by_desc</code>（按句柄）、<code>refs_by_node</code>（按 node）。</li>
+</ol>
+<hr>
+<p>下一章：<a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/"><code>05-完整消息流转.md</code></a> —— 把前面所有零件拼成一次完整的端到端调用。</p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/05-完整消息流转/"><small>上一篇</small><strong>Android Binder 05：完整消息流转</strong></a><a href="/2026/11/11/03-rpc原理/"><small>下一篇</small><strong>Android Binder 03：RPC 原理</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-1-整体关系图" title="1. 整体关系图">1. 整体关系图</a></li><li class="toc-level-2"><a href="#section-2-binder-proc-一个进程的-binder-状态" title="2. binder_proc：一个进程的 Binder 状态">2. binder_proc：一个进程的 Binder 状态</a></li><li class="toc-level-2"><a href="#section-3-binder-thread-一个线程的-binder-状态" title="3. binder_thread：一个线程的 Binder 状态">3. binder_thread：一个线程的 Binder 状态</a></li><li class="toc-level-3"><a href="#section-looper-状态机" title="looper 状态机">looper 状态机</a></li><li class="toc-level-3"><a href="#section-transaction-stack-处理嵌套调用的关键" title="transaction_stack：处理嵌套调用的关键">transaction_stack：处理嵌套调用的关键</a></li><li class="toc-level-2"><a href="#section-4-binder-node-服务端对象在内核里的-户口" title="4. binder_node：服务端对象在内核里的「户口」">4. binder_node：服务端对象在内核里的「户口」</a></li><li class="toc-level-3"><a href="#section-ptr-和-cookie-的区别-容易搞混" title="ptr 和 cookie 的区别（容易搞混）">ptr 和 cookie 的区别（容易搞混）</a></li><li class="toc-level-2"><a href="#section-5-binder-ref-客户端进程对某个对象的-引用记录" title="5. binder_ref：客户端进程对某个对象的「引用记录」">5. binder_ref：客户端进程对某个对象的「引用记录」</a></li><li class="toc-level-2"><a href="#section-6-binder-buffer-与-binder-alloc-内存模型" title="6. binder_buffer 与 binder_alloc：内存模型">6. binder_buffer 与 binder_alloc：内存模型</a></li><li class="toc-level-3"><a href="#section-6-1-binder-buffer" title="6.1 binder_buffer">6.1 binder_buffer</a></li><li class="toc-level-3"><a href="#section-6-2-binder-alloc-每个进程一个" title="6.2 binder_alloc：每个进程一个">6.2 binder_alloc：每个进程一个</a></li><li class="toc-level-3"><a href="#section-6-3-内存映射-binder-的-一次拷贝-是怎么实现的" title="6.3 内存映射：Binder 的「一次拷贝」是怎么实现的">6.3 内存映射：Binder 的「一次拷贝」是怎么实现的</a></li><li class="toc-level-4"><a href="#section-第一步-进程启动时-mmap-一块缓冲区" title="第一步：进程启动时 mmap 一块缓冲区">第一步：进程启动时 mmap 一块缓冲区</a></li><li class="toc-level-4"><a href="#section-第二步-内核把这块内存的物理页同时映射到-内核虚拟地址" title="第二步：内核把这块内存的物理页同时映射到「内核虚拟地址」">第二步：内核把这块内存的物理页同时映射到「内核虚拟地址」</a></li><li class="toc-level-4"><a href="#section-第三步-发送时-内核把数据从-发送方用户空间-拷到-接收方缓冲区" title="第三步：发送时，内核把数据从「发送方用户空间」拷到「接收方缓冲区」">第三步：发送时，内核把数据从「发送方用户空间」拷到「接收方缓冲区」</a></li><li class="toc-level-4"><a href="#section-第四步-接收方用完后归还" title="第四步：接收方用完后归还">第四步：接收方用完后归还</a></li><li class="toc-level-3"><a href="#section-6-4-为什么大小是-1mb-8kb" title="6.4 为什么大小是 1MB - 8KB？">6.4 为什么大小是 1MB - 8KB？</a></li><li class="toc-level-2"><a href="#section-7-引用计数-三种-strong-两种-weak" title="7. 引用计数：三种 strong / 两种 weak">7. 引用计数：三种 strong / 两种 weak</a></li><li class="toc-level-2"><a href="#section-8-内核入口-从-ioctl-到事务投递的完整函数链" title="8. 内核入口：从 ioctl 到事务投递的完整函数链">8. 内核入口：从 ioctl 到事务投递的完整函数链</a></li><li class="toc-level-3"><a href="#section-binder-thread-read-如何挑选待办" title="binder_thread_read 如何挑选待办">binder_thread_read 如何挑选待办</a></li><li class="toc-level-2"><a href="#section-9-三种查找路径-面试常问" title="9. 三种查找路径（面试常问）">9. 三种查找路径（面试常问）</a></li><li class="toc-level-2"><a href="#section-10-debugfs-直接观察这些结构体" title="10. debugfs：直接观察这些结构体">10. debugfs：直接观察这些结构体</a></li><li class="toc-level-2"><a href="#section-11-小结" title="11. 小结">11. 小结</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

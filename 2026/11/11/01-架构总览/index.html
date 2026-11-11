@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Android Binder 01：架构总览 · 殷仔的博客</title><meta name="description" content="认识 Binder 的四层架构、Client、Server、ServiceManager 与驱动，以及三个 Binder 域和 AIDL、HIDL 的关系。"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/"><meta property="og:type" content="article"><meta property="og:title" content="Android Binder 01：架构总览"><meta property="og:description" content="认识 Binder 的四层架构、Client、Server、ServiceManager 与驱动，以及三个 Binder 域和 AIDL、HIDL 的关系。"><meta property="og:url" content="https://akjoson.github.io/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-11T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/">Android</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">Binder</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>Android Binder 01：架构总览</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-11">2026-11-11</time><span>约 8 分钟阅读</span></div><div class="tags"><span>Android</span><span>Binder</span><span>IPC</span><span>源码阅读</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-1-binder-到底是个什么东西">1. Binder 到底是个什么东西</a></li><li><a href="#section-2-分层架构">2. 分层架构</a></li><li><a href="#section-各层职责一句话">各层职责一句话</a></li><li><a href="#section-3-四个角色">3. 四个角色</a></li><li><a href="#section-为什么必须有-servicemanager">为什么必须有 ServiceManager？</a></li><li><a href="#section-4-三个-binder-域-三个设备节点">4. 三个 Binder 域（三个设备节点）</a></li><li><a href="#section-5-与-aidl-hidl-aidl-over-vendor-的关系">5. 与 AIDL / HIDL / AIDL-over-vendor 的关系</a></li><li><a href="#section-6-数据流全景-先建立直觉">6. 数据流全景（先建立直觉）</a></li><li><a href="#section-7-本文档集合用到的术语约定">7. 本文档集合用到的术语约定</a></li></ol></details><article class="prose"><blockquote>
+<p><strong>Android Binder 消息流转全解</strong></p>
+<p><a href="/2026/11/11/00-android-binder%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC%E5%85%A8%E8%A7%A3/">导读 消息流转全解：系列导读</a> · <a href="/2026/11/11/01-%E6%9E%B6%E6%9E%84%E6%80%BB%E8%A7%88/">01 架构总览</a> · <a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/">02 消息封装</a> · <a href="/2026/11/11/03-rpc%E5%8E%9F%E7%90%86/">03 RPC 原理</a> · <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/">04 内核数据结构</a> · <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/">05 完整消息流转</a> · <a href="/2026/11/11/06-%E8%BF%9B%E9%98%B6%E4%B8%93%E9%A2%98/">06 进阶专题</a> · <a href="/2026/11/11/07-%E6%BA%90%E7%A0%81%E7%B4%A2%E5%BC%95%E4%B8%8E%E8%B0%83%E8%AF%95/">07 源码索引与调试</a></p>
+</blockquote>
+<h2 id="section-1-binder-到底是个什么东西">1. Binder 到底是个什么东西</h2>
+<p><strong>Binder 是 Android 独有的、面向对象的跨进程通信（IPC）机制，同时也是它的远程调用（RPC）框架。</strong></p>
+<p>它和 Linux 传统 IPC 最大的区别在于：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>传统 IPC（Socket / 管道 / 消息队列）</th>
+<th>Binder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>传的是<strong>字节流</strong>，谁写的谁读的要双方自己约定</td>
+<td>传的是<strong>对象引用 + 方法调用</strong>，有类型系统（AIDL）</td>
+</tr>
+<tr>
+<td>需要两次拷贝（发送方 → 内核 → 接收方）</td>
+<td>只有<strong>一次拷贝</strong>（详见 <a href="/2026/11/11/04-%E5%86%85%E6%A0%B8%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/"><code>04-内核数据结构.md</code></a>）</td>
+</tr>
+<tr>
+<td>不知道对端是谁（谁先连上算谁的）</td>
+<td>内核知道每个传输的<strong>身份</strong>（pid/uid），天然支持权限校验</td>
+</tr>
+<tr>
+<td>需要自己实现「谁在哪、怎么找」</td>
+<td>有 <code>ServiceManager</code> 名字服务</td>
+</tr>
+<tr>
+<td>需要自己实现线程管理和并发</td>
+<td>内核负责唤醒和线程池扩充</td>
+</tr>
+</tbody>
+</table></div>
+<p>Binder 的目标很直接：<strong>让跨进程调用写起来像本地方法调用</strong>。</p>
+<div class="code-block"><div class="code-toolbar"><span>java</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-java">// 本地调用
+String s = localService.echo(&quot;hi&quot;);
+
+// 跨进程调用 —— 写法几乎一样，中间发生的事情完全不同
+String s = remoteService.echo(&quot;hi&quot;);
+</code></pre></div>
+<hr>
+<h2 id="section-2-分层架构">2. 分层架构</h2>
+<p>Binder 是典型的「用户态协议 + 内核驱动」设计。从上到下分四层：</p>
+<p><img src="/images/binder/01-1.png" alt="2. 分层架构（图 1）"></p>
+<h3 id="section-各层职责一句话">各层职责一句话</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Java 框架层</strong></td>
+<td>给应用提供 <code>IBinder</code>/<code>Parcel</code>/AIDL 这些 API，屏蔽 JNI 细节</td>
+</tr>
+<tr>
+<td><strong>JNI 胶水层</strong></td>
+<td>在 Java <code>Binder</code> 和 native <code>BBinder</code> 之间做<strong>双向适配</strong>（<code>JavaBBinder</code> 就是「长得像 BBinder 的 Java 对象」）</td>
+</tr>
+<tr>
+<td><strong>Native 库层</strong></td>
+<td>实现真正的协议逻辑：打包事务、调用 <code>ioctl</code>、解析返回值、维护线程池</td>
+</tr>
+<tr>
+<td><strong>内核驱动层</strong></td>
+<td>做<strong>对象引用翻译</strong>、<strong>内存分配</strong>、<strong>线程唤醒</strong>，是 Binder 性能和安全性的关键</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>重要认知</strong>：Binder 的「魔法」大部分在内核里。用户态库（<code>libbinder</code>）做的事情本质上是<strong>用 <code>ioctl</code> 跟驱动对话</strong>，把「方法调用」翻译成一串内核命令。</p>
+</blockquote>
+<hr>
+<h2 id="section-3-四个角色">3. 四个角色</h2>
+<p>一次 Binder 通信里只有这四种参与者：</p>
+<p><img src="/images/binder/01-2.png" alt="3. 四个角色（图 2）"></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>角色</th>
+<th>关键特征</th>
+<th>在哪个进程</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Client</strong></td>
+<td>只持有 <code>handle</code>（一个 <code>uint32_t</code>），<strong>看不到</strong>服务端对象的真实地址</td>
+<td>任意应用进程</td>
+</tr>
+<tr>
+<td><strong>Server</strong></td>
+<td>持有真正的 Binder 对象（Java 里是 <code>android.os.Binder</code> 子类实例；native 里是 <code>BBinder</code>），内核为它建了 <code>binder_node</code></td>
+<td>如 <code>system_server</code></td>
+</tr>
+<tr>
+<td><strong>ServiceManager</strong></td>
+<td>特殊：它的 <code>handle</code> 被<strong>固定为 0</strong>，是 Binder 的「DNS」</td>
+<td><code>/system/bin/servicemanager</code></td>
+</tr>
+<tr>
+<td><strong>Binder 驱动</strong></td>
+<td>唯一能看到所有进程、能做引用翻译和内存拷贝的地方</td>
+<td>内核</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-为什么必须有-servicemanager">为什么必须有 ServiceManager？</h3>
+<p>因为 Client 要调用 Server，前提是<strong>拿到 handle</strong>。第一次拿到 handle 的过程叫「查询服务」：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">Client: &quot;我要用 foo 服务&quot;  →（handle 0）→ ServiceManager
+ServiceManager: &quot;foo 的 handle 是 42&quot;  → Client
+Client: 拿着 handle=42 去调用  →（内核翻译）→ foo 服务
+</code></pre></div>
+<p><code>ServiceManager</code> 自己的 handle 是 0，这个 0 是<strong>内核硬编码</strong>的（第一个调用 <code>BINDER_SET_CONTEXT_MGR</code> ioctl 的进程会成为 context manager，内核把它的 node 记在全局变量 <code>binder_context_mgr_node</code> 上）。详见 <a href="/2026/11/11/05-%E5%AE%8C%E6%95%B4%E6%B6%88%E6%81%AF%E6%B5%81%E8%BD%AC/"><code>05-完整消息流转.md</code></a> 第 5 节。</p>
+<hr>
+<h2 id="section-4-三个-binder-域-三个设备节点">4. 三个 Binder 域（三个设备节点）</h2>
+<p>从 Android 8 开始，Binder 被拆成三个<strong>互相隔离</strong>的域，各自有独立的 <code>/dev/</code> 节点：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>设备节点</th>
+<th>宏</th>
+<th>用途</th>
+<th>谁在用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/dev/binder</code></td>
+<td><code>BINDER_TYPE_BINDER</code> 域</td>
+<td>框架层 IPC</td>
+<td>App、<code>system_server</code>、系统服务</td>
+</tr>
+<tr>
+<td><code>/dev/hwbinder</code></td>
+<td>hwbinder 域</td>
+<td>HIDL / AIDL over hwbinder</td>
+<td>HAL 进程（相机、传感器…）</td>
+</tr>
+<tr>
+<td><code>/dev/vndbinder</code></td>
+<td>vndbinder 域</td>
+<td>Vendor 进程互调</td>
+<td>vendor 分区里的守护进程</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>为什么要拆？</strong> 安全和版本解耦：</p>
+<ul>
+<li>应用进程一般只能访问 <code>/dev/binder</code>，碰不到 HAL。</li>
+<li><code>hwbinder</code> 上的 <code>HIDL</code> 有自己的 ABI 版本管理，可以独立于 framework 演进。</li>
+<li>三个域的 <code>binder_node</code>/<code>binder_ref</code> 是<strong>完全独立的命名空间</strong>，handle 不能跨域使用。</li>
+</ul>
+<blockquote>
+<p>实现细节：Android 10 引入 <strong><code>binderfs</code></strong>（一种内核 pseudo-filesystem），可以动态创建多个 Binder 域，不再依赖固定的 <code>misc</code> 设备号。挂载点通常是 <code>/dev/binderfs/</code>。</p>
+</blockquote>
+<hr>
+<h2 id="section-5-与-aidl-hidl-aidl-over-vendor-的关系">5. 与 AIDL / HIDL / AIDL-over-vendor 的关系</h2>
+<p><strong>AIDL 不是 Binder 本身，它只是「帮你生成 Binder 样板代码」的编译器。</strong></p>
+<p><img src="/images/binder/01-3.png" alt="5. 与 AIDL / HIDL / AIDL-over-vendor 的关系（图 3）"></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>名字</th>
+<th>是什么</th>
+<th>底层</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AIDL</strong></td>
+<td>Android Interface Definition Language。写 <code>.aidl</code> 文件 → 生成 <code>Stub</code>/<code>Proxy</code></td>
+<td><code>/dev/binder</code></td>
+</tr>
+<tr>
+<td><strong>HIDL</strong></td>
+<td>Android 8~10 的 HAL 接口语言，语法类似 AIDL 但基于 C++</td>
+<td><code>/dev/hwbinder</code></td>
+</tr>
+<tr>
+<td><strong>Stable AIDL</strong></td>
+<td>Android 11+ 用 AIDL 全面替代 HIDL，支持 <code>@VintfStability</code> 和稳定版本</td>
+<td><code>/dev/binder</code> 或 <code>/dev/hwbinder</code></td>
+</tr>
+<tr>
+<td><strong>AIDL-over-vndbinder</strong></td>
+<td>vendor 进程之间的 AIDL</td>
+<td><code>/dev/vndbinder</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>记住这个分层</strong>：</p>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">AIDL 只是「代码生成器」
+    ↓ 生成
+Proxy / Stub（用户态样板代码）
+    ↓ 调用
+libbinder（IPCThreadState / BpBinder / Parcel）
+    ↓ ioctl
+Binder 驱动（真正的 RPC 引擎）
+</code></pre></div>
+<p>AIDL 生成的东西是<strong>可替换</strong>的 —— 你完全可以手写 <code>transact</code>/<code>onTransact</code>（Android 早期就是这么干的），只是在 Android 12+ 因为 <code>Parcel</code> 构造函数被标记为 <code>@UnsupportedAppUsage</code>，手写会越来越麻烦。</p>
+<hr>
+<h2 id="section-6-数据流全景-先建立直觉">6. 数据流全景（先建立直觉）</h2>
+<p>下面这张图就是本目录后面所有文档要展开的东西。<strong>先看个大概，不用抠细节</strong>：</p>
+<p><img src="/images/binder/01-4.png" alt="6. 数据流全景（先建立直觉）（图 4）"></p>
+<hr>
+<h2 id="section-7-本文档集合用到的术语约定">7. 本文档集合用到的术语约定</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>术语</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>事务 / transaction</strong></td>
+<td>一次「调用 + 参数」，是 Binder 的传输单位</td>
+</tr>
+<tr>
+<td><strong>句柄 / handle</strong></td>
+<td>内核分配给某进程的 <code>uint32_t</code>，代表「对某个 Binder 对象的引用」</td>
+</tr>
+<tr>
+<td><strong>实体 / node</strong></td>
+<td>服务端进程里真正的 Binder 对象，内核用 <code>binder_node</code> 表示</td>
+</tr>
+<tr>
+<td><strong>BC_xxx</strong></td>
+<td>Binder <strong>C</strong>ommand，用户态<strong>写给</strong>内核的命令</td>
+</tr>
+<tr>
+<td><strong>BR_xxx</strong></td>
+<td>Binde<strong>R</strong> <strong>R</strong>eturn，内核<strong>返回给</strong>用户态的响应</td>
+</tr>
+<tr>
+<td><strong>代理 / Proxy</strong></td>
+<td>客户端侧代表远程对象的本地替身</td>
+</tr>
+<tr>
+<td><strong>桩 / Stub</strong></td>
+<td>服务端侧的骨架，负责解包参数、调用真实实现</td>
+</tr>
+<tr>
+<td><strong>oneway</strong></td>
+<td>单程异步调用，不等回复（<code>TF_ONE_WAY</code>）</td>
+</tr>
+</tbody>
+</table></div>
+<hr>
+<p>下一章：<a href="/2026/11/11/02-%E6%B6%88%E6%81%AF%E5%B0%81%E8%A3%85/"><code>02-消息封装.md</code></a> —— 搞清楚这些数据在内存里到底长什么样。</p>
+<hr>
+<p>通过Claude生成。</p>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/Android/Binder/">继续阅读Binder <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/02-消息封装/"><small>上一篇</small><strong>Android Binder 02：消息封装</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-2"><a href="#section-1-binder-到底是个什么东西" title="1. Binder 到底是个什么东西">1. Binder 到底是个什么东西</a></li><li class="toc-level-2"><a href="#section-2-分层架构" title="2. 分层架构">2. 分层架构</a></li><li class="toc-level-3"><a href="#section-各层职责一句话" title="各层职责一句话">各层职责一句话</a></li><li class="toc-level-2"><a href="#section-3-四个角色" title="3. 四个角色">3. 四个角色</a></li><li class="toc-level-3"><a href="#section-为什么必须有-servicemanager" title="为什么必须有 ServiceManager？">为什么必须有 ServiceManager？</a></li><li class="toc-level-2"><a href="#section-4-三个-binder-域-三个设备节点" title="4. 三个 Binder 域（三个设备节点）">4. 三个 Binder 域（三个设备节点）</a></li><li class="toc-level-2"><a href="#section-5-与-aidl-hidl-aidl-over-vendor-的关系" title="5. 与 AIDL / HIDL / AIDL-over-vendor 的关系">5. 与 AIDL / HIDL / AIDL-over-vendor 的关系</a></li><li class="toc-level-2"><a href="#section-6-数据流全景-先建立直觉" title="6. 数据流全景（先建立直觉）">6. 数据流全景（先建立直觉）</a></li><li class="toc-level-2"><a href="#section-7-本文档集合用到的术语约定" title="7. 本文档集合用到的术语约定">7. 本文档集合用到的术语约定</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>

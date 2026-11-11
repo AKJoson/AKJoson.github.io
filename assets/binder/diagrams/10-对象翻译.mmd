@@ -1,0 +1,13 @@
+%% Binder 对象跨进程翻译
+sequenceDiagram
+    participant A as 进程 A 的 Parcel
+    participant K as 内核 binder_transaction
+    participant B as 进程 B 的 Parcel
+
+    Note over A: flat_binder_object<br/>type = BINDER_TYPE_BINDER<br/>binder = 0x7f0000a000 (BBinder 地址)<br/>cookie = 0x7f0000b000
+    A->>K: ioctl 提交负载
+    K->>K: 读 offsets[0] = 0x0C, 定位结构
+    K->>K: 按 binder 地址查/建 binder_node
+    K->>K: 为进程 B 查/建 binder_ref<br/>分配 handle = 42
+    K->>B: 就地改写: type = BINDER_TYPE_HANDLE, handle = 42
+    Note over B: B 读到的是 handle = 42

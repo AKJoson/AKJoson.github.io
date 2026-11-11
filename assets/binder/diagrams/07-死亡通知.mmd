@@ -1,0 +1,18 @@
+%% 死亡通知时序
+sequenceDiagram
+    autonumber
+    participant C as Client 进程
+    participant K as 内核
+    participant S as Server 进程
+
+    Note over C: binder.linkToDeath(recipient, 0)
+    C->>K: BC_REQUEST_DEATH_NOTIFICATION(handle=42, cookie=&BpBinder)
+    K->>K: ref.death = { cookie }
+
+    Note over S: Server 进程崩溃 / 退出
+    S--xK: 进程退出, binder_proc 销毁
+    K->>K: 遍历 node->refs<br/>找注册了死亡通知的 ref
+    K->>C: BR_DEAD_BINDER (cookie = &BpBinder)
+    C->>C: BpBinder::sendObituary()<br/>遍历 mObituaries<br/>recipient->binderDied()
+    C->>K: BC_DEAD_BINDER_DONE (cookie)
+    K->>K: 释放 binder_ref_death
