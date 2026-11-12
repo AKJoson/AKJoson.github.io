@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>数据库的事务是什么? · 殷仔的博客</title><meta name="description" content="了解数据库的事务"><meta name="author" content="Cherry"><link rel="canonical" href="https://akjoson.github.io/2026/11/12/%E6%95%B0%E6%8D%AE%E5%BA%93%E7%9A%84%E4%BA%8B%E5%8A%A1/"><meta property="og:type" content="article"><meta property="og:title" content="数据库的事务是什么?"><meta property="og:description" content="了解数据库的事务"><meta property="og:url" content="https://akjoson.github.io/2026/11/12/%E6%95%B0%E6%8D%AE%E5%BA%93%E7%9A%84%E4%BA%8B%E5%8A%A1/"><meta property="og:site_name" content="殷仔的博客"><meta property="og:locale" content="zh_CN"><meta name="twitter:card" content="summary"><meta property="article:published_time" content="2026-11-12T00:00:00+08:00"><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="alternate" type="application/atom+xml" title="殷仔的博客" href="/atom.xml"><script src="/assets/theme-init.js"></script><link rel="stylesheet" href="/assets/theme.css"><script src="/assets/theme.js" defer></script></head>
+<body><a class="skip-link" href="#main">跳到正文</a><div class="site-shell">    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="殷仔的博客 首页">
+        <svg class="cherry" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M13 25c0-10 11-8 11-21 2 7 5 9 7 17M24 5c-7-3-11-1-14 2 5 3 10 3 14-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="28" r="7" fill="#A65C4C"/><circle cx="30" cy="27" r="7" fill="#B87361"/><path d="M8 25c-1 0-2 2-2 3m21-4c-1 0-2 2-2 3" stroke="#fff" stroke-opacity=".6" stroke-linecap="round"/></svg>
+        殷仔的博客
+      </a>
+      <nav class="header-nav" aria-label="主导航">
+        <a href="/" aria-current="page">文章</a>
+        <a href="/archives/">归档</a>
+        <a href="/about/">关于</a>
+        <a href="https://github.com/AKJoson" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换到深色主题" title="切换到深色主题"><span aria-hidden="true">◐</span></button>
+    </header>
+<main id="main"><nav class="post-breadcrumb" aria-label="文章分类"><a href="/">文章</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/">计算机</a><span aria-hidden="true">/</span><a class="category-label" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/%E6%95%B0%E6%8D%AE%E5%BA%93/">数据库</a></nav><header class="post-header"><p class="eyebrow">TOPIC NOTES</p><h1>数据库的事务是什么?</h1><div class="post-meta"><span>Cherry</span><time datetime="2026-11-12">2026-11-12</time><span>约 5 分钟阅读</span></div><div class="tags"><span>数据库</span><span>基础</span></div></header><div class="post-layout"><div class="post-main"><details class="mobile-toc"><summary>文章目录</summary><ol><li><a href="#section-数据库的事务是怎么回事">数据库的事务是怎么回事?</a></li><li><a href="#section-what-什么是事务transaction">(What) 什么是事务Transaction?</a></li><li><a href="#section-why-为什么需要事务">(Why) 为什么需要事务?</a></li><li><a href="#section-how-事务如何工作">(How) 事务如何工作?</a></li></ol></details><article class="prose"><h3 id="section-数据库的事务是怎么回事">数据库的事务是怎么回事?</h3>
+<blockquote>
+<p>Database management systems allow not only a single user to query and modify data, but
+multiple people to do so simultaneously. If every user is only executing queries, such as might be
+the case with a data warehouse during normal business hours, then there are very few issues for
+the database server to deal with. If some of the users are adding and/or modifying data,
+however, the server must handle quite a bit more bookkeeping.</p>
+<p>引用自《Learning SQL》2009版本</p>
+</blockquote>
+<p><strong>我的理解:</strong></p>
+<p>数据库是允许多用过户的，当多个用户并发的进行增删查改的时候，就会出现数据竞争，从而导致数据出现不同步的问题。</p>
+<h4 id="section-what-什么是事务transaction">(What) 什么是事务Transaction?</h4>
+<p><strong>事务是数据库里面为了保证数据同步，避免出现竞态错误，异常出现后回滚数据状态的一个操作。</strong></p>
+<h4 id="section-why-为什么需要事务">(Why) 为什么需要事务?</h4>
+<p><strong>为了解决多用户同时修改某个数据，为了避免你把自己的钱从Saving储蓄账户转到Checking支票账户，Saving余额变少了，但是钱没转过去(可能是因为程序执行一半，服务器死机了)，事务来保证操作的原子性，保证同步。</strong></p>
+<h4 id="section-how-事务如何工作">(How) 事务如何工作?</h4>
+<div class="code-block"><div class="code-toolbar"><span>text</span><button type="button" class="copy-code" aria-label="复制代码">复制</button></div><pre tabindex="0"><code class="language-text">/*开启事务*/
+START TRANSACTION;
+ /* withdraw money from first account, making sure balance is sufficient */
+UPDATE account SET avail_balance = avail_balance - 500
+WHERE account_id = 9988
+ AND avail_balance &gt; 500;
+IF &lt;exactly one row was updated by the previous statement&gt; THEN
+ /* deposit money into second account */
+ UPDATE account SET avail_balance = avail_balance + 500
+ WHERE account_id = 9989;
+ IF &lt;exactly one row was updated by the previous statement&gt; THEN
+ /* everything worked, make the changes permanent */
+ COMMIT; /*提交事务*/
+ ELSE
+ /* something went wrong, undo all changes in this transaction */
+ ROLLBACK; /*出现异常，回滚/
+ END IF;
+ELSE
+ /* insufficient funds, or error encountered during update */
+ ROLLBACK;
+END IF;
+
+</code></pre></div>
+<blockquote>
+<p>Once a transaction has begun, whether explicitly via the start transaction command or
+implicitly by the database server, you must explicitly end your transaction for your changes to
+become permanent. You do this by way of the commit command, which instructs the server to
+mark the changes as permanent and release any resources (i.e., page or row locks) used during
+the transaction.</p>
+</blockquote>
+<p><strong>我们主动的开启一个事务,然后修改数据，结束之后主动调用commit,锁释放。</strong></p>
+<p><strong>事务如何保证操作可靠?</strong></p>
+<ul>
+<li>修改数据时上锁,哪种锁?</li>
+</ul>
+<blockquote>
+<p>Table locks 对整个表上锁</p>
+<blockquote>
+<p>Keep multiple users from modifying data in the same table simultaneously</p>
+</blockquote>
+<p>Page locks 对数据所在的页上锁</p>
+<blockquote>
+<p>Keep multiple users from modifying data on the same page (a page is a segment of memory generally in the range of 2 KB to 16 KB) of a table simultaneously</p>
+</blockquote>
+<p>Row locks 对数据所在行上锁</p>
+<blockquote>
+<p>Keep multiple users from modifying the same row in a table simultaneously</p>
+</blockquote>
+</blockquote>
+<ul>
+<li>异常发生后,程序恢复时回滚之前的状态</li>
+</ul>
+</article><div class="post-signoff"><span aria-hidden="true">✳</span><p>每一个不曾起舞的日子，都是对生命的一种辜负。</p><a class="text-link" href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA/%E6%95%B0%E6%8D%AE%E5%BA%93/">继续阅读数据库 <span aria-hidden="true">↗</span></a></div><nav class="adjacent-posts" aria-label="相邻文章"><a href="/2026/11/11/01-架构总览/"><small>上一篇</small><strong>Android Binder 01：架构总览</strong></a></nav></div><aside class="post-sidebar"><nav class="toc" aria-label="文章目录"><p class="eyebrow">这篇文章里</p><ol><li class="toc-level-3"><a href="#section-数据库的事务是怎么回事" title="数据库的事务是怎么回事?">数据库的事务是怎么回事?</a></li><li class="toc-level-4"><a href="#section-what-什么是事务transaction" title="(What) 什么是事务Transaction?">(What) 什么是事务Transaction?</a></li><li class="toc-level-4"><a href="#section-why-为什么需要事务" title="(Why) 为什么需要事务?">(Why) 为什么需要事务?</a></li><li class="toc-level-4"><a href="#section-how-事务如何工作" title="(How) 事务如何工作?">(How) 事务如何工作?</a></li></ol><a class="back-to-top" href="#main">回到顶部 ↑</a></nav></aside></div></main>    <footer class="site-footer"><span>© <span id="year">2026</span> 殷仔的博客 · Cherry</span><span><a href="/atom.xml">RSS 订阅 ↗</a><span class="footer-spark" aria-hidden="true">✳</span></span></footer>
+</div><span class="screen-reader-only" id="copy-status" role="status"></span></body></html>
